@@ -1,92 +1,41 @@
 <!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body {
-            margin: 0; padding: 0;
-            background: transparent; overflow: hidden;
-            display: flex; justify-content: center; align-items: center;
-            height: 100vh;
-        }
-
-        /* La zone de projection lumineuse */
-        #ambilight {
-            width: 1087px;
-            height: 669px;
-            background-color: rgba(0, 0, 0, 0);
-            filter: blur(100px); /* Diffusion ultra-douce pour l'effet mur */
-            border-radius: 50px;
-            transition: background-color 0.15s ease-out;
-            /* L'ombre portée renforce l'aspect volumétrique */
-            box-shadow: 0 0 150px var(--glow-color);
-        }
-
-        #start-btn {
-            position: fixed;
-            padding: 15px 25px;
-            background: #111; color: #0ff;
-            border: 1px solid #0ff; cursor: pointer;
-            font-family: sans-serif; text-transform: uppercase;
-        }
-    </style>
-</head>
-<body>
-
-    <button id="start-btn">Démarrer l'analyse Gameplay</button>
-    <div id="ambilight" style="--glow-color: rgba(0,0,0,0);"></div>
-    <canvas id="proc-canvas" style="display:none;"></canvas>
+<html>
+<body style="background:transparent; margin:0; display:flex; justify-content:center; align-items:center; height:100vh;">
+    <button id="btn" style="padding:20px; cursor:pointer;">LANCER L'AMBILIGHT</button>
+    <div id="amb" style="width:1087px; height:669px; filter:blur(100px); border-radius:50px; position:absolute; z-index:-1;"></div>
+    <canvas id="c" style="display:none;"></canvas>
 
     <script>
-        const ambilight = document.getElementById('ambilight');
-        const btn = document.getElementById('start-btn');
-        const canvas = document.getElementById('proc-canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const btn = document.getElementById('btn');
+        const amb = document.getElementById('amb');
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d', {willReadFrequently: true});
 
         btn.onclick = async () => {
             try {
-                // On demande la capture de l'écran
-                const stream = await navigator.mediaDevices.getDisplayMedia({ 
-                    video: { cursor: "never" }, 
-                    audio: false 
-                });
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.play();
-                
+                const stream = await navigator.mediaDevices.getDisplayMedia({video:true});
                 btn.style.display = 'none';
-
-                video.onloadedmetadata = () => {
-                    canvas.width = 32; // Basse résolution pour performance maximale
-                    canvas.height = 32;
-                    
-                    function update() {
-                        if (video.paused || video.ended) return;
-                        
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const data = frame.data;
-                        
-                        let r = 0, g = 0, b = 0;
-                        // On moyenne les couleurs de toute l'image du jeu
-                        for (let i = 0; i < data.length; i += 4) {
-                            r += data[i]; g += data[i+1]; b += data[i+2];
-                        }
-                        
-                        const totalPixels = data.length / 4;
-                        r = Math.floor(r / totalPixels);
-                        g = Math.floor(g / totalPixels);
-                        b = Math.floor(b / totalPixels);
-
-                        const color = `rgb(${r}, ${g}, ${b})`;
-                        ambilight.style.backgroundColor = color;
-                        ambilight.style.setProperty('--glow-color', `rgba(${r}, ${g}, ${b}, 0.8)`);
-                        
+                const v = document.createElement('video');
+                v.srcObject = stream;
+                v.play();
+                v.onloadedmetadata = () => {
+                    canvas.width = 16; canvas.height = 16;
+                    const update = () => {
+                        ctx.drawImage(v, 0, 0, 16, 16);
+                        const d = ctx.getImageData(0,0,16,16).data;
+                        let r=0, g=0, b=0;
+                        for(let i=0; i<d.length; i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; }
+                        let count = d.length/4;
+                        let color = `rgb(${~~(r/count)},${~~(g/count)},${~~(b/count)})`;
+                        amb.style.background = color;
+                        amb.style.boxShadow = `0 0 150px ${color}`;
                         requestAnimationFrame(update);
-                    }
+                    };
                     update();
                 };
-            } catch (err) { alert("Erreur : " + err); }
+            } catch (e) {
+                alert("Erreur de permission : " + e);
+            }
         };
     </script>
 </body>
