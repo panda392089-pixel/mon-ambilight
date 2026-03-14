@@ -1,218 +1,132 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Ambilight PRO</title>
+    <meta charset="UTF-8">
+    <title>Ambilight Cloud - Zero Latency</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: transparent; }
+        
+        #ambilight-wrapper {
+            position: absolute;
+            top: -20vh; left: -20vw;
+            width: 140vw; height: 140vh;
+            pointer-events: none;
+            /* Force l'accélération matérielle */
+            transform: translateZ(0);
+        }
 
-<style>
+        .glow-zone {
+            position: absolute;
+            width: 70vw;
+            height: 70vh;
+            mix-blend-mode: screen;
+            filter: blur(180px);
+            opacity: 0.9;
+            transition: none !important; /* Suppression totale des délais */
+            will-change: background;
+        }
 
-body{
-margin:0;
-overflow:hidden;
-background:transparent;
-}
+        /* Positions stratégiques pour la projection */
+        #z-top    { top: 0; left: 35vw; }
+        #z-left   { left: 0; top: 35vh; }
+        #z-right  { right: 0; top: 35vh; }
+        #z-bottom { bottom: 0; left: 35vw; }
 
-#wrap{
-position:absolute;
-top:-25vh;
-left:-25vw;
-width:150vw;
-height:150vh;
-pointer-events:none;
-}
-
-.glow{
-position:absolute;
-width:70vw;
-height:70vh;
-mix-blend-mode:screen;
-filter:blur(160px);
-opacity:.95;
-will-change:background;
-}
-
-/* TOP */
-#z0{top:0; left:10vw}
-#z1{top:0; left:40vw}
-#z2{top:0; left:70vw}
-
-/* LEFT */
-#z3{left:0; top:20vh}
-#z4{left:0; top:50vh}
-#z5{left:0; top:80vh}
-
-/* RIGHT */
-#z6{right:0; top:20vh}
-#z7{right:0; top:50vh}
-#z8{right:0; top:80vh}
-
-/* BOTTOM */
-#z9{bottom:0; left:10vw}
-#z10{bottom:0; left:40vw}
-#z11{bottom:0; left:70vw}
-
-#btn{
-position:fixed;
-top:50%;
-left:50%;
-transform:translate(-50%,-50%);
-padding:16px 30px;
-background:#000;
-color:#fff;
-border:1px solid #fff;
-cursor:pointer;
-z-index:999;
-}
-
-</style>
+        #start-btn {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            padding: 15px 30px; background: #000; color: #fff; border: 1px solid #fff;
+            cursor: pointer; z-index: 1000; font-family: sans-serif; text-transform: uppercase;
+        }
+    </style>
 </head>
-
 <body>
 
-<button id="btn">ACTIVER AMBILIGHT PRO</button>
+    <button id="start-btn">Activer la synchro instantanée</button>
+    <div id="ambilight-wrapper">
+        <div id="z-top" class="glow-zone"></div>
+        <div id="z-left" class="glow-zone"></div>
+        <div id="z-right" class="glow-zone"></div>
+        <div id="z-bottom" class="glow-zone"></div>
+    </div>
+    <canvas id="procCanvas" style="display:none;"></canvas>
 
-<div id="wrap"></div>
+    <script>
+        const btn = document.getElementById('start-btn');
+        const canvas = document.getElementById('procCanvas');
+        // 'desynchronized' réduit la latence du buffer de rendu
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: true });
+        
+        const zones = {
+            'z-top':    { x: 1, y: 0 },
+            'z-left':   { x: 0, y: 1 },
+            'z-right':  { x: 2, y: 1 },
+            'z-bottom': { x: 1, y: 2 }
+        };
 
-<canvas id="c" style="display:none"></canvas>
+        btn.onclick = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { 
+                        width: 128, 
+                        height: 72,
+                        frameRate: { ideal: 60, max: 144 } // Support des hautes fréquences
+                    }
+                });
+                
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                // Désactive tout traitement audio ou bufferisation
+                video.muted = true;
+                video.play();
+                btn.style.display = 'none';
 
-<script>
+                video.onplaying = () => {
+                    // Grille 3x3 : le minimum vital pour la réactivité
+                    canvas.width = 3;
+                    canvas.height = 3;
+                    
+                    // Utilisation de la méthode la plus rapide supportée
+                    if ('requestVideoFrameCallback' in video) {
+                        video.requestVideoFrameCallback(processFrame);
+                    } else {
+                        renderFallback();
+                    }
+                };
 
-const SIZE = 12
+                function processFrame() {
+                    updateColors();
+                    video.requestVideoFrameCallback(processFrame);
+                }
 
-const canvas = document.getElementById("c")
-const ctx = canvas.getContext("2d",{alpha:false,desynchronized:true})
+                function renderFallback() {
+                    updateColors();
+                    requestAnimationFrame(renderFallback);
+                }
 
-canvas.width = SIZE
-canvas.height = SIZE
+                function updateColors() {
+                    if (video.paused || video.ended) return;
 
-const wrap = document.getElementById("wrap")
+                    ctx.drawImage(video, 0, 0, 3, 3);
+                    const data = ctx.getImageData(0, 0, 3, 3).data;
 
-const zones = []
+                    for (let id in zones) {
+                        const pos = zones[id];
+                        const i = (pos.y * 3 + pos.x) * 4;
+                        
+                        let r = data[i], g = data[i+1], b = data[i+2];
 
-function addZone(id,x,y){
+                        // Boost de vibrance sans perte de performance
+                        const avg = (r + g + b) / 3;
+                        r = Math.min(255, r + (r - avg) * 0.8);
+                        g = Math.min(255, g + (g - avg) * 0.8);
+                        b = Math.min(255, b + (b - avg) * 0.8);
 
-const div=document.createElement("div")
-div.className="glow"
-div.id="z"+id
-wrap.appendChild(div)
-
-zones.push({
-id:"z"+id,
-x:x,
-y:y,
-color:[0,0,0]
-})
-
-}
-
-/* 12 zones */
-
-addZone(0,1,0)
-addZone(1,6,0)
-addZone(2,10,0)
-
-addZone(3,0,3)
-addZone(4,0,6)
-addZone(5,0,10)
-
-addZone(6,11,3)
-addZone(7,11,6)
-addZone(8,11,10)
-
-addZone(9,1,11)
-addZone(10,6,11)
-addZone(11,10,11)
-
-const btn = document.getElementById("btn")
-
-btn.onclick = async ()=>{
-
-const stream = await navigator.mediaDevices.getDisplayMedia({
-video:{
-width:160,
-height:90,
-frameRate:60
-}
-})
-
-const video=document.createElement("video")
-video.srcObject=stream
-video.play()
-video.muted=true
-
-btn.style.display="none"
-
-video.onplaying=()=>loop(video)
-
-}
-
-function loop(video){
-
-ctx.drawImage(video,0,0,SIZE,SIZE)
-
-const data = ctx.getImageData(0,0,SIZE,SIZE).data
-
-for(const z of zones){
-
-const i=(z.y*SIZE+z.x)*4
-
-let r=data[i]
-let g=data[i+1]
-let b=data[i+2]
-
-const brightness = (r+g+b)/3
-
-/* boost saturation */
-
-r += (r-brightness)*1.4
-g += (g-brightness)*1.4
-b += (b-brightness)*1.4
-
-/* explosion boost */
-
-const lumBoost = brightness/255
-
-r *= 1+lumBoost*0.6
-g *= 1+lumBoost*0.6
-b *= 1+lumBoost*0.6
-
-r=Math.min(255,r)
-g=Math.min(255,g)
-b=Math.min(255,b)
-
-/* difference */
-
-const diff =
-Math.abs(r-z.color[0])+
-Math.abs(g-z.color[1])+
-Math.abs(b-z.color[2])
-
-/* adaptive smoothing */
-
-const smooth =
-diff>140 ? 0.75 :
-diff>70  ? 0.45 :
-diff>30  ? 0.25 :
-0.15
-
-z.color[0]+= (r-z.color[0])*smooth
-z.color[1]+= (g-z.color[1])*smooth
-z.color[2]+= (b-z.color[2])*smooth
-
-const rr=Math.round(z.color[0])
-const gg=Math.round(z.color[1])
-const bb=Math.round(z.color[2])
-
-document.getElementById(z.id).style.background=
-`radial-gradient(circle,rgb(${rr},${gg},${bb}) 0%,transparent 80%)`
-
-}
-
-requestAnimationFrame(()=>loop(video))
-
-}
-
-</script>
-
+                        document.getElementById(id).style.background = 
+                            `radial-gradient(circle, rgb(${r},${g},${b}) 0%, transparent 85%)`;
+                    }
+                }
+            } catch (err) { console.error(err); }
+        };
+    </script>
 </body>
 </html>
