@@ -2,48 +2,46 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Ambilight Cloud - Ultra Reactive</title>
+    <title>Ambilight Cloud - Zero Latency</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; }
         
         #ambilight-wrapper {
             position: absolute;
-            top: -15vh; left: -15vw;
-            width: 130vw; height: 130vh;
+            top: -20vh; left: -20vw;
+            width: 140vw; height: 140vh;
             pointer-events: none;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            align-content: center;
+            /* Force l'accélération matérielle */
+            transform: translateZ(0);
         }
 
         .glow-zone {
             position: absolute;
-            width: 60vw;
-            height: 60vh;
+            width: 70vw;
+            height: 70vh;
             mix-blend-mode: screen;
-            filter: blur(150px); /* Diffusion massive */
-            opacity: 0.85;
-            /* Suppression des transitions CSS pour éliminer la latence visuelle */
-            transition: none; 
+            filter: blur(180px);
+            opacity: 0.9;
+            transition: none !important; /* Suppression totale des délais */
+            will-change: background;
         }
 
-        /* Positionnement en "nuage" autour de l'écran */
+        /* Positions stratégiques pour la projection */
         #z-top    { top: 0; left: 35vw; }
-        #z-bottom { bottom: 0; left: 35vw; }
         #z-left   { left: 0; top: 35vh; }
         #z-right  { right: 0; top: 35vh; }
+        #z-bottom { bottom: 0; left: 35vw; }
 
         #start-btn {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            padding: 20px 40px; background: #000; color: #fff; border: 1px solid #fff;
-            cursor: pointer; z-index: 1000; font-family: sans-serif;
+            padding: 15px 30px; background: #000; color: #fff; border: 1px solid #fff;
+            cursor: pointer; z-index: 1000; font-family: sans-serif; text-transform: uppercase;
         }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">LANCER LE FLUX RÉACTIF</button>
+    <button id="start-btn">Activer la synchro instantanée</button>
     <div id="ambilight-wrapper">
         <div id="z-top" class="glow-zone"></div>
         <div id="z-left" class="glow-zone"></div>
@@ -55,67 +53,77 @@
     <script>
         const btn = document.getElementById('start-btn');
         const canvas = document.getElementById('procCanvas');
-        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }); // Latence réduite
+        // 'desynchronized' réduit la latence du buffer de rendu
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: true });
         
         const zones = {
-            'z-top':    { x: 2, y: 0 },
-            'z-left':   { x: 0, y: 2 },
-            'z-right':  { x: 3, y: 2 },
-            'z-bottom': { x: 2, y: 3 }
+            'z-top':    { x: 1, y: 0 },
+            'z-left':   { x: 0, y: 1 },
+            'z-right':  { x: 2, y: 1 },
+            'z-bottom': { x: 1, y: 2 }
         };
 
         btn.onclick = async () => {
             try {
                 const stream = await navigator.mediaDevices.getDisplayMedia({
                     video: { 
-                        width: 128, // Résolution minimale pour vitesse maximale
+                        width: 128, 
                         height: 72,
-                        frameRate: 60 
+                        frameRate: { ideal: 60, max: 144 } // Support des hautes fréquences
                     }
                 });
                 
                 const video = document.createElement('video');
                 video.srcObject = stream;
+                // Désactive tout traitement audio ou bufferisation
+                video.muted = true;
                 video.play();
                 btn.style.display = 'none';
 
                 video.onplaying = () => {
-                    canvas.width = 4;
-                    canvas.height = 4;
-                    render();
+                    // Grille 3x3 : le minimum vital pour la réactivité
+                    canvas.width = 3;
+                    canvas.height = 3;
+                    
+                    // Utilisation de la méthode la plus rapide supportée
+                    if ('requestVideoFrameCallback' in video) {
+                        video.requestVideoFrameCallback(processFrame);
+                    } else {
+                        renderFallback();
+                    }
                 };
 
-                function render() {
+                function processFrame() {
+                    updateColors();
+                    video.requestVideoFrameCallback(processFrame);
+                }
+
+                function renderFallback() {
+                    updateColors();
+                    requestAnimationFrame(renderFallback);
+                }
+
+                function updateColors() {
                     if (video.paused || video.ended) return;
 
-                    // Capture ultra-rapide
-                    ctx.drawImage(video, 0, 0, 4, 4);
-                    const data = ctx.getImageData(0, 0, 4, 4).data;
+                    ctx.drawImage(video, 0, 0, 3, 3);
+                    const data = ctx.getImageData(0, 0, 3, 3).data;
 
                     for (let id in zones) {
                         const pos = zones[id];
-                        const i = (pos.y * 4 + pos.x) * 4;
+                        const i = (pos.y * 3 + pos.x) * 4;
                         
-                        // Extraction et Boost de Saturation
                         let r = data[i], g = data[i+1], b = data[i+2];
-                        
-                        // Algorithme de vibrance (accentue sans durcir)
-                        const max = Math.max(r, g, b);
-                        const avg = (r + g + b) / 3;
-                        const saturation = 1.5; // Augmentez pour des couleurs plus riches
-                        
-                        r = Math.floor(r + (r - avg) * saturation);
-                        g = Math.floor(g + (g - avg) * saturation);
-                        b = Math.floor(b + (b - avg) * saturation);
 
-                        // Application immédiate
-                        const color = `rgb(${r},${g},${b})`;
+                        // Boost de vibrance sans perte de performance
+                        const avg = (r + g + b) / 3;
+                        r = Math.min(255, r + (r - avg) * 0.8);
+                        g = Math.min(255, g + (g - avg) * 0.8);
+                        b = Math.min(255, b + (b - avg) * 0.8);
+
                         document.getElementById(id).style.background = 
-                            `radial-gradient(circle, ${color} 0%, transparent 80%)`;
+                            `radial-gradient(circle, rgb(${r},${g},${b}) 0%, transparent 85%)`;
                     }
-                    
-                    // Utilisation de requestAnimationFrame pour synchroniser avec le rafraîchissement écran
-                    requestAnimationFrame(render);
                 }
             } catch (err) { console.error(err); }
         };
