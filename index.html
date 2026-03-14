@@ -1,250 +1,182 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ambilight Gaming Pro</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ambilight Gaming Pro - Ultra Soft</title>
 
-<style>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-}
+        body {
+            background: #000;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            font-family: 'Segoe UI', sans-serif;
+        }
 
-body{
-background:#000;
-overflow:hidden;
-height:100vh;
-width:100vw;
-}
+        /* Conteneur principal avec un léger flou global pour lisser les pixels */
+        #ambilight-wrapper {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: -1;
+            filter: blur(60px); /* Flou global pour fusionner les zones */
+        }
 
-/* conteneur lumière */
+        .glow-zone {
+            position: absolute;
+            border-radius: 50%; /* Rend les zones circulaires */
+            opacity: 0.8;
+            mix-blend-mode: screen;
+            will-change: background, transform;
+            transition: background 0.1s ease-out; /* Adoucit les transitions de couleur */
+        }
 
-#ambilight-wrapper{
-position:fixed;
-top:0;
-left:0;
-width:100vw;
-height:100vh;
-pointer-events:none;
-z-index:-1;
-}
+        /* Positionnement stratégique pour éviter l'effet "bordure" */
+        #z-top {
+            top: -15%; left: 15%;
+            width: 70%; height: 50%;
+        }
 
-/* halos lumineux */
+        #z-left {
+            top: 15%; left: -15%;
+            width: 50%; height: 70%;
+        }
 
-.glow-zone{
-position:absolute;
-opacity:0.95;
-mix-blend-mode:screen;
-will-change:background;
-}
+        #z-right {
+            top: 15%; right: -15%;
+            width: 50%; height: 70%;
+        }
 
-/* projection plafond */
+        #z-bottom {
+            bottom: -15%; left: 15%;
+            width: 70%; height: 50%;
+        }
 
-#z-top{
-top:-25vh;
-left:-15vw;
-width:130vw;
-height:70vh;
-}
+        /* Interface utilisateur */
+        #ui-layer {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+        }
 
-/* projection gauche */
+        button {
+            padding: 20px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            background: transparent;
+            border: 2px solid rgba(255,255,255,0.5);
+            color: white;
+            cursor: pointer;
+            border-radius: 50px;
+            transition: all 0.3s;
+        }
 
-#z-left{
-top:-10vh;
-left:-25vw;
-width:70vw;
-height:120vh;
-}
+        button:hover {
+            background: white;
+            color: black;
+            box-shadow: 0 0 20px rgba(255,255,255,0.4);
+        }
 
-/* projection droite */
-
-#z-right{
-top:-10vh;
-right:-25vw;
-width:70vw;
-height:120vh;
-}
-
-/* projection bas */
-
-#z-bottom{
-bottom:-25vh;
-left:-15vw;
-width:130vw;
-height:70vh;
-}
-
-/* interface */
-
-#ui-layer{
-position:fixed;
-top:50%;
-left:50%;
-transform:translate(-50%,-50%);
-text-align:center;
-z-index:10;
-}
-
-button{
-padding:20px 40px;
-font-size:18px;
-font-weight:bold;
-background:transparent;
-border:2px solid white;
-color:white;
-cursor:pointer;
-}
-
-button:hover{
-background:white;
-color:black;
-}
-
-canvas{
-display:none;
-}
-
-</style>
+        canvas { display: none; }
+    </style>
 </head>
 
 <body>
 
-<div id="ui-layer">
-<button id="start-btn">DÉMARRER AMBILIGHT</button>
-<p style="color:#888;margin-top:15px;font-family:sans-serif;">
-Sélectionnez votre écran de jeu
-</p>
-</div>
+    <div id="ui-layer">
+        <button id="start-btn">DÉMARRER LE MODE IMMERSIF</button>
+        <p style="color:#666; margin-top:15px;">Capturez votre écran de jeu pour activer l'ambiance</p>
+    </div>
 
-<div id="ambilight-wrapper">
+    <div id="ambilight-wrapper">
+        <div id="z-top" class="glow-zone"></div>
+        <div id="z-left" class="glow-zone"></div>
+        <div id="z-right" class="glow-zone"></div>
+        <div id="z-bottom" class="glow-zone"></div>
+    </div>
 
-<div id="z-top" class="glow-zone"></div>
-<div id="z-left" class="glow-zone"></div>
-<div id="z-right" class="glow-zone"></div>
-<div id="z-bottom" class="glow-zone"></div>
+    <canvas id="procCanvas"></canvas>
 
-</div>
+    <script>
+        const btn = document.getElementById("start-btn");
+        const canvas = document.getElementById("procCanvas");
+        const ctx = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
 
-<canvas id="procCanvas"></canvas>
+        const elements = {
+            top: document.getElementById("z-top"),
+            left: document.getElementById("z-left"),
+            right: document.getElementById("z-right"),
+            bottom: document.getElementById("z-bottom")
+        };
 
-<script>
+        const zones = {
+            top: { x: 1, y: 0 },
+            left: { x: 0, y: 1 },
+            right: { x: 2, y: 1 },
+            bottom: { x: 1, y: 2 }
+        };
 
-const btn = document.getElementById("start-btn")
+        const SATURATION_BOOST = 1.8; // Augmenté pour plus de dynamisme
 
-const canvas = document.getElementById("procCanvas")
+        btn.onclick = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { width: 64, height: 36, frameRate: 60 },
+                    audio: false
+                });
 
-const ctx = canvas.getContext("2d",{
-alpha:false,
-desynchronized:true,
-willReadFrequently:true
-})
+                const video = document.createElement("video");
+                video.srcObject = stream;
+                video.muted = true;
+                await video.play();
 
-/* cache DOM */
+                document.getElementById("ui-layer").style.display = "none";
+                
+                canvas.width = 3;
+                canvas.height = 3;
 
-const elements={
-top:document.getElementById("z-top"),
-left:document.getElementById("z-left"),
-right:document.getElementById("z-right"),
-bottom:document.getElementById("z-bottom")
-}
+                const updateGlow = () => {
+                    if (video.paused || video.ended) return;
 
-/* mapping pixels */
+                    ctx.drawImage(video, 0, 0, 3, 3);
+                    const data = ctx.getImageData(0, 0, 3, 3).data;
 
-const zones={
-top:{x:1,y:0},
-left:{x:0,y:1},
-right:{x:2,y:1},
-bottom:{x:1,y:2}
-}
+                    for (let id in zones) {
+                        const z = zones[id];
+                        const i = (z.y * 3 + z.x) * 4;
 
-const SATURATION_BOOST = 1.6
+                        let r = data[i], g = data[i+1], b = data[i+2];
 
-btn.onclick = async()=>{
+                        // Boost de saturation amélioré
+                        const gray = 0.2989 * r + 0.587 * g + 0.114 * b;
+                        r = Math.max(0, Math.min(255, gray + (r - gray) * SATURATION_BOOST));
+                        g = Math.max(0, Math.min(255, gray + (g - gray) * SATURATION_BOOST));
+                        b = Math.max(0, Math.min(255, gray + (b - gray) * SATURATION_BOOST));
 
-try{
+                        // Application du style avec un dégradé radial interne pour plus de douceur
+                        elements[id].style.background = `radial-gradient(circle, rgba(${r},${g},${b},1) 0%, rgba(${r},${g},${b},0.3) 60%, rgba(${r},${g},${b},0) 100%)`;
+                        
+                        // Petit effet de pulsation subtile selon la luminosité
+                        const brightness = (r + g + b) / 765;
+                        elements[id].style.transform = `scale(${1 + brightness * 0.1})`;
+                    }
+                    video.requestVideoFrameCallback(updateGlow);
+                };
 
-const stream = await navigator.mediaDevices.getDisplayMedia({
+                video.requestVideoFrameCallback(updateGlow);
 
-video:{
-width:{ideal:64},
-height:{ideal:36},
-frameRate:{ideal:60}
-},
-
-audio:false
-
-})
-
-const video = document.createElement("video")
-
-video.srcObject = stream
-video.muted = true
-
-await video.play()
-
-document.getElementById("ui-layer").style.display="none"
-
-canvas.width = 3
-canvas.height = 3
-
-video.requestVideoFrameCallback(renderLoop)
-
-function renderLoop(){
-
-if(video.paused || video.ended) return
-
-ctx.drawImage(video,0,0,3,3)
-
-const data = ctx.getImageData(0,0,3,3).data
-
-for(let id in zones){
-
-const z = zones[id]
-
-const i = (z.y*3+z.x)*4
-
-let r=data[i]
-let g=data[i+1]
-let b=data[i+2]
-
-const gray = 0.2989*r + 0.587*g + 0.114*b
-
-r = Math.max(0,Math.min(255,gray+(r-gray)*SATURATION_BOOST))
-g = Math.max(0,Math.min(255,gray+(g-gray)*SATURATION_BOOST))
-b = Math.max(0,Math.min(255,gray+(b-gray)*SATURATION_BOOST))
-
-const el = elements[id]
-
-/* halo circulaire doux */
-
-el.style.background = `radial-gradient(
-circle at center,
-rgba(${r},${g},${b},0.95) 0%,
-rgba(${r},${g},${b},0.65) 20%,
-rgba(${r},${g},${b},0.40) 40%,
-rgba(${r},${g},${b},0.20) 60%,
-rgba(${r},${g},${b},0.05) 75%,
-rgba(${r},${g},${b},0) 100%
-)`
-
-}
-
-video.requestVideoFrameCallback(renderLoop)
-
-}
-
-}catch(err){
-
-console.error("Erreur capture :",err)
-
-}
-
-}
-
-</script>
-
+            } catch (err) {
+                console.error("Erreur :", err);
+            }
+        };
+    </script>
 </body>
 </html>
