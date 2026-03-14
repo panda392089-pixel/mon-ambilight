@@ -1,59 +1,162 @@
-<style>
-    /* ... (ton reste de CSS) ... */
-    .glow-zone {
-        /* On utilise background-color au lieu de radial-gradient pour plus de performance */
-        background-color: transparent; 
-        filter: blur(150px); /* Le flou crée l'effet de diffusion sans le coût du gradient */
-        will-change: background-color;
-        transition: none !important;
-    }
-</style>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ambilight Fluide & Organique</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050505;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
 
-<script>
-    // ... (début du script identique) ...
+        /* Conteneur principal qui limite la zone de lumière */
+        #ambient-container {
+            position: relative;
+            width: 80vw;
+            max-width: 1000px;
+            aspect-ratio: 16 / 9;
+            z-index: 1;
+        }
 
-    // 1. PASSE LE SMOOTHING À 1 (Désactive le délai)
-    const SMOOTHING = 1; 
+        /* Le lecteur vidéo ou l'élément de capture */
+        #display-surface {
+            width: 100%;
+            height: 100%;
+            background: #000;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            z-index: 10;
+        }
 
-    btn.onclick = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { 
-                    width: 128, 
-                    height: 72, 
-                    frameRate: 60 // Assure-toi que c'est bien à 60
-                },
-                // Optionnel : réduit la latence système
-                selfBrowserSurface: "exclude", 
-                surfaceSwitching: "include"
-            });
+        /* Les Bulles de Lumière (Glow Zones) */
+        .glow-zone {
+            position: absolute;
+            border-radius: 50%; /* Forme circulaire */
+            filter: blur(100px); /* Diffusion douce */
+            opacity: 0.6;
+            mix-blend-mode: screen; /* Mélange lumineux des couleurs */
+            pointer-events: none;
+            z-index: -1;
+            will-change: background-color, transform;
+            /* Transition légère pour éviter le clignotement sec */
+            transition: background-color 0.15s ease-out; 
+        }
 
-            // ... (création vidéo identique) ...
+        /* Positionnement stratégique pour haut et côtés */
+        #glow-top    { width: 60%; height: 60%; top: -25%; left: 20%; }
+        #glow-left   { width: 50%; height: 70%; top: 15%; left: -25%; }
+        #glow-right  { width: 50%; height: 70%; top: 15%; right: -25%; }
 
-            function renderLoop() {
-                if (video.paused || video.ended) return;
+        button {
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            background: #fff;
+            border: none;
+            border-radius: 50px;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+        button:hover { transform: scale(1.05); }
+    </style>
+</head>
+<body>
 
-                // Capture ultra-rapide
-                ctx.drawImage(video, 0, 0, 3, 3);
-                const data = ctx.getImageData(0, 0, 3, 3).data;
+    <div id="ambient-container">
+        <div id="glow-top" class="glow-zone"></div>
+        <div id="glow-left" class="glow-zone"></div>
+        <div id="glow-right" class="glow-zone"></div>
 
-                for (let id in zones) {
-                    const z = zones[id];
-                    const i = (z.y * 3 + z.x) * 4;
-                    
-                    // On prend la couleur brute directement
-                    const r = data[i];
-                    const g = data[i+1];
-                    const b = data[i+2];
+        <div id="display-surface">
+            <button id="startBtn">Démarrer l'Ambilight</button>
+        </div>
+    </div>
 
-                    // Mise à jour directe de la couleur de fond (plus rapide que le gradient)
-                    // Le flou CSS (filter: blur) s'occupe de l'aspect esthétique
-                    document.getElementById(id).style.backgroundColor = `rgb(${r},${g},${b})`;
+    <script>
+        const btn = document.getElementById('startBtn');
+        const container = document.getElementById('display-surface');
+        
+        // Configuration des zones d'échantillonnage sur le canvas 3x3
+        const zones = {
+            'glow-top':   { x: 1, y: 0 }, // Pixel milieu-haut
+            'glow-left':  { x: 0, y: 1 }, // Pixel milieu-gauche
+            'glow-right': { x: 2, y: 1 }  // Pixel milieu-droit
+        };
+
+        btn.onclick = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { width: 128, height: 72, frameRate: 60 },
+                    selfBrowserSurface: "exclude"
+                });
+
+                btn.style.display = 'none';
+
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.muted = true;
+                video.play();
+
+                // Canvas invisible pour l'analyse
+                const canvas = document.createElement('canvas');
+                canvas.width = 3;
+                canvas.height = 3;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+                // On affiche la vidéo dans l'interface
+                video.style.width = "100%";
+                video.style.height = "100%";
+                video.style.borderRadius = "8px";
+                video.style.objectFit = "cover";
+                container.appendChild(video);
+
+                function renderLoop() {
+                    if (video.paused || video.ended) return;
+
+                    // 1. Capture ultra-rapide en 3x3 (moyennage auto par le navigateur)
+                    ctx.drawImage(video, 0, 0, 3, 3);
+                    const data = ctx.getImageData(0, 0, 3, 3).data;
+
+                    // 2. Mise à jour des halos
+                    for (let id in zones) {
+                        const z = zones[id];
+                        const i = (z.y * 3 + z.x) * 4;
+                        
+                        const r = data[i];
+                        const g = data[i+1];
+                        const b = data[i+2];
+
+                        const element = document.getElementById(id);
+                        if (element) {
+                            element.style.backgroundColor = `rgb(${r},${g},${b})`;
+                            
+                            // Optionnel : variation de taille selon l'intensité lumineuse
+                            const intensity = (r + g + b) / 300; 
+                            element.style.transform = `scale(${1 + intensity})`;
+                        }
+                    }
+
+                    requestAnimationFrame(renderLoop);
                 }
-                
-                // Utilisation de requestAnimationFrame pour synchroniser avec l'écran
-                requestAnimationFrame(renderLoop);
+
+                video.onplay = () => renderLoop();
+
+            } catch (err) {
+                console.error("Erreur : ", err);
             }
-        } catch (err) { console.error(err); }
-    };
-</script>
+        };
+    </script>
+</body>
+</html>
