@@ -2,28 +2,28 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Ambilight Pro - Bordures Fluides</title>
+    <title>OBS Ambilight Pro - Doux & Équilibré</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; font-family: sans-serif; }
         
         #ambilight-container {
             position: absolute;
-            top: 15vh;
-            left: 15vw;
-            width: 70vw;
-            height: 70vh;
+            top: 12vh; /* Un peu plus haut */
+            left: 12vw; /* Un peu plus à gauche */
+            width: 76vw; /* Légèrement plus large pour couvrir plus de zone */
+            height: 76vh;
             z-index: 1;
             opacity: 0; 
-            transition: opacity 1.5s;
-            /* Rayon modéré pour garder une structure de diffusion sur les bords */
-            border-radius: 40px; 
+            transition: opacity 2s ease-in-out; /* Transition plus douce */
+            border-radius: 50px; 
         }
 
         #ambilight-glow {
             width: 100%;
             height: 100%;
-            border-radius: 40px;
-            filter: blur(60px); /* Flou augmenté pour fusionner les segments */
+            border-radius: 50px;
+            /* Le flou initial casse déjà l'effet de bord */
+            filter: blur(80px); 
         }
 
         #start-btn {
@@ -31,16 +31,16 @@
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             padding: 20px 40px;
-            background: #111;
+            background: #1a1a1a;
             color: white;
-            border: 2px solid #444; cursor: pointer; border-radius: 10px;
+            border: 1px solid #333; cursor: pointer; border-radius: 8px;
             z-index: 100;
         }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">ACTIVER DIFFUSION LÉGÈRE</button>
+    <button id="start-btn">ACTIVER AMBIANCE DOUCE</button>
     
     <div id="ambilight-container">
         <div id="ambilight-glow"></div>
@@ -70,8 +70,8 @@
                 container.style.opacity = '1';
 
                 video.onplaying = () => {
-                    canvas.width = 20; // Un peu plus de points pour la précision latérale
-                    canvas.height = 12;
+                    canvas.width = 16; 
+                    canvas.height = 9;
                     render();
                 };
 
@@ -80,23 +80,32 @@
                     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
                     
                     // --- ÉCHANTILLONNAGE DES MILIEUX ---
-                    const cTop    = getAvgRGB(data, 10, 1);  // Haut Milieu
-                    const cLeft   = getAvgRGB(data, 1, 6);   // Gauche Milieu
-                    const cRight  = getAvgRGB(data, 18, 6);  // Droite Milieu
-                    const cBottom = getAvgRGB(data, 10, 10); // Bas Milieu (pour l'équilibre)
+                    const cTop    = getAvgRGB(data, 8, 1);  // Haut Milieu
+                    const cLeft   = getAvgRGB(data, 1, 4);  // Gauche Milieu
+                    const cRight  = getAvgRGB(data, 14, 4); // Droite Milieu
+                    // Le bas est échantillonné pour l'équilibre global, mais moins projeté
+                    const cBottom = getAvgRGB(data, 8, 7);  
 
                     glow.style.boxShadow = `
-                        /* LUEUR HAUT (étirée horizontalement) */
-                        0px -15vh 350px 80px ${cTop},
+                        /* === COUCHE 1 : La lueur d'ambiance très diffuse === */
                         
-                        /* LUEUR GAUCHE (étirée verticalement) */
-                        -25vw 0px 350px 60px ${cLeft},
+                        /* HAUT : Pas de décalage X, décalage Y vers le haut (-10vh), gros flou, gros étalement (10vw) */
+                        0px -10vh 400px 10vw ${cTop},
                         
-                        /* LUEUR DROITE (étirée verticalement) */
-                        25vw 0px 350px 60px ${cRight},
+                        /* GAUCHE : Décalage X vers la gauche (-10vw), pas de décalage Y, gros flou, gros étalement (10vh) */
+                        -10vw 0px 400px 10vh ${cLeft},
                         
-                        /* LUEUR BAS (plus subtile pour ne pas polluer le sol) */
-                        0px 10vh 250px 40px ${cBottom}
+                        /* DROITE : Décalage X vers la droite (10vw), pas de décalage Y, gros flou, gros étalement (10vh) */
+                        10vw 0px 400px 10vh ${cRight},
+                        
+                        /* === COUCHE 2 : Le cœur de couleur (plus près du bord, plus intense) === */
+                        
+                        0px -5vh 150px 2vw ${cTop},
+                        -5vw 0px 150px 2vh ${cLeft},
+                        5vw 0px 150px 2vh ${cRight},
+
+                        /* BAS : Très subtil, juste pour casser le noir absolu */
+                        0px 5vh 200px 0px ${cBottom}
                     `;
 
                     requestAnimationFrame(render);
@@ -104,8 +113,8 @@
 
                 function getAvgRGB(data, x, y) {
                     const i = (y * canvas.width + x) * 4;
-                    // On garde une opacité forte pour que le blur diffuse bien
-                    return `rgba(${data[i]}, ${data[i+1]}, ${data[i+2]}, 0.9)`;
+                    // L'OPACITÉ EST RÉDUITE À 0.6 POUR LA DOUCEUR
+                    return `rgba(${data[i]}, ${data[i+1]}, ${data[i+2]}, 0.6)`;
                 }
 
             } catch (err) {
