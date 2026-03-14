@@ -1,131 +1,53 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
     <style>
-        :root {
-            --glow-color: rgba(0, 255, 255, 0.5);
-            --frame-width: 838px;
-            --frame-height: 587px;
-        }
-
         body {
-            margin: 0; padding: 0;
-            background: #020202; /* Noir profond pour maximiser le contraste */
-            display: flex; justify-content: center; align-items: center;
-            height: 100vh;
+            margin: 0;
             overflow: hidden;
+            background: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
         }
 
-        /* Le conteneur principal (Cadre invisible) */
-        #ambilight-container {
+        .ambilight-container {
             position: relative;
-            width: var(--frame-width);
-            height: var(--frame-height);
-            border: 1px solid rgba(255, 255, 255, 0.05); /* Liseré très fin pour le cadre */
-            z-index: 2;
+            width: 80vw; /* Ajuste la taille de ton jeu ici */
+            height: 45vw; /* Ratio 16:9 */
+            box-shadow: 0 0 50px 30px rgba(0,0,0,0.5);
         }
 
-        /* La couche de diffusion (le Halo) */
-        #ambilight-glow {
+        /* L'élément qui crée l'effet de lumière */
+        .glow {
             position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             z-index: -1;
-            background: var(--glow-color);
-            filter: blur(120px); /* Diffusion ultra-large */
-            opacity: 0.8;
-            border-radius: 40px;
-            
-            /* On coupe la projection vers le bas */
-            /* polygon(X-gauche Y-haut, X-droite Y-haut, X-droite Y-bas, X-gauche Y-bas) */
-            /* On monte le Y du bas de 100% à 100% pour arrêter la lumière au bord inférieur */
-            clip-path: inset(-500px -500px 0px -500px); 
-            
-            transition: background 0.3s ease-out;
+            /* Le flou intense crée l'effet diffuseur */
+            filter: blur(80px) brightness(1.5) saturate(200%);
+            transform: scale(1.1); /* Pour que la lumière dépasse du cadre */
         }
 
-        /* Ombre portée supplémentaire pour la profondeur */
-        #ambilight-container::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            box-shadow: 0px -30px 100px 20px var(--glow-color);
-            z-index: -1;
-            clip-path: inset(-200px -200px 0px -200px);
-        }
-
-        #start-btn {
-            position: fixed;
-            z-index: 100;
-            padding: 12px 24px;
-            background: rgba(0,0,0,0.8); color: white;
-            border: 1px solid #444; cursor: pointer;
-            font-family: 'Segoe UI', sans-serif;
-            border-radius: 5px;
+        video, canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border-radius: 4px;
         }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">Démarrer l'Ambiance</button>
-    
-    <div id="ambilight-container">
-        <div id="ambilight-glow"></div>
+    <div class="ambilight-container">
+        <div id="glow" class="glow"></div>
+        
+        <div id="game-placeholder" style="background: #000; width:100%; height:100%;">
+            </div>
     </div>
-    
-    <canvas id="proc-canvas" style="display:none;"></canvas>
 
-    <script>
-        const glow = document.getElementById('ambilight-glow');
-        const btn = document.getElementById('start-btn');
-        const canvas = document.getElementById('proc-canvas');
-        const ctx = canvas.getContext('2d', { WILL_READ_FREQUENTLY: true });
-
-        btn.onclick = async () => {
-            try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({ 
-                    video: { cursor: "never" }, 
-                    audio: false 
-                });
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.play();
-                
-                btn.style.display = 'none';
-
-                video.onloadedmetadata = () => {
-                    // Analyse basse résolution pour un mélange de couleurs fluide
-                    canvas.width = 32; 
-                    canvas.height = 32;
-                    
-                    function update() {
-                        if (video.paused || video.ended) return;
-                        
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-                        
-                        let r = 0, g = 0, b = 0;
-                        for (let i = 0; i < imageData.length; i += 4) {
-                            r += imageData[i];
-                            g += imageData[i+1];
-                            b += imageData[i+2];
-                        }
-                        
-                        const pixelCount = imageData.length / 4;
-                        r = Math.round(r / pixelCount);
-                        g = Math.round(g / pixelCount);
-                        b = Math.round(b / pixelCount);
-
-                        // On applique la couleur avec une opacité maîtrisée pour le réalisme
-                        const colorStr = `rgba(${r}, ${g}, ${b}, 0.6)`;
-                        document.documentElement.style.setProperty('--glow-color', colorStr);
-                        
-                        requestAnimationFrame(update);
-                    }
-                    update();
-                };
-            } catch (err) { console.error("Erreur d'accès à l'écran : " + err); }
-        };
-    </script>
 </body>
 </html>
