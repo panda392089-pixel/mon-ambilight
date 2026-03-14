@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Ambilight Rectangulaire - Ultra Soft & Fast</title>
+    <title>OBS Ambilight Pro - Balanced Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; font-family: sans-serif; }
         
@@ -15,48 +15,48 @@
             pointer-events: none;
         }
 
-        /* Zones de projection rectangulaires */
         .glow-zone {
             position: absolute;
-            filter: blur(60px); /* Lissage des bords du rectangle */
+            filter: blur(70px); /* Flou légèrement augmenté pour plus de douceur */
             mix-blend-mode: screen;
-            /* Transition courte pour la réactivité, mais assez longue pour la douceur */
-            transition: background 0.15s linear; 
+            transition: background 0.12s ease-out; /* Plus réactif sur les changements de couleur */
         }
 
+        /* AJUSTEMENT HAUT : Plus haut et dégradé plus long */
         #glow-top {
-            top: 0; left: 5vw;
-            width: 90vw; height: 25vh;
+            top: -5vh; /* On remonte un peu pour libérer de l'espace */
+            left: 5vw;
+            width: 90vw; 
+            height: 40vh; /* Augmenté de 25vh à 40vh pour une projection équitable */
         }
 
         #glow-left {
-            top: 5vh; left: 0;
-            width: 25vw; height: 90vh;
+            top: 5vh; left: -2vw;
+            width: 30vw; height: 90vh;
         }
 
         #glow-right {
-            top: 5vh; right: 0;
-            width: 25vw; height: 90vh;
+            top: 5vh; right: -2vw;
+            width: 30vw; height: 90vh;
         }
 
         #start-btn {
             position: fixed;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            padding: 20px 30px;
-            background: #111;
-            color: #55acee;
-            border: 2px solid #55acee;
+            padding: 20px 35px;
+            background: #000;
+            color: #fff;
+            border: 1px solid #333;
             cursor: pointer;
-            border-radius: 8px;
-            font-weight: bold;
+            border-radius: 5px;
             z-index: 1000;
         }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">ACTIVER AMBILIGHT RECTANGULAIRE</button>
+    <button id="start-btn">ACTIVER L'EFFET (ÉQUILIBRÉ)</button>
     
     <div id="ambilight-wrapper">
         <div id="glow-top" class="glow-zone"></div>
@@ -80,7 +80,7 @@
         btn.onclick = async () => {
             try {
                 const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { width: 480, height: 270, frameRate: 60 }, // Haute fréquence, basse res
+                    video: { width: 480, height: 270, frameRate: 60 },
                     audio: false
                 });
 
@@ -92,9 +92,8 @@
                 wrapper.style.opacity = '1';
 
                 video.onplaying = () => {
-                    // Analyse sur une grille 8x8 pour une réactivité maximale
-                    canvas.width = 8; 
-                    canvas.height = 8;
+                    canvas.width = 10; 
+                    canvas.height = 10;
                     render();
                 };
 
@@ -104,15 +103,15 @@
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-                    // Extraction rapide des couleurs moyennes par bordure
-                    const cTop = getAvg(data, [[2,0],[3,0],[4,0],[5,0]]);
-                    const cLeft = getAvg(data, [[0,2],[0,3],[0,4],[0,5]]);
-                    const cRight = getAvg(data, [[7,2],[7,3],[7,4],[7,5]]);
+                    // On cible les pixels du bord haut de manière plus large pour plus de puissance
+                    const cTop = getAvg(data, [[3,0],[4,0],[5,0],[6,0],[4,1],[5,1]]);
+                    const cLeft = getAvg(data, [[0,3],[0,4],[0,5],[0,6]]);
+                    const cRight = getAvg(data, [[9,3],[9,4],[9,5],[9,6]]);
 
-                    // Rendu rectangulaire via linear-gradients
-                    zones.top.style.background = `linear-gradient(to top, transparent, ${cTop})`;
-                    zones.left.style.background = `linear-gradient(to left, transparent, ${cLeft})`;
-                    zones.right.style.background = `linear-gradient(to right, transparent, ${cRight})`;
+                    // Modification du gradient haut pour qu'il "remonte" plus fort
+                    zones.top.style.background = `linear-gradient(to bottom, ${cTop}, transparent 90%)`;
+                    zones.left.style.background = `linear-gradient(to right, ${cLeft}, transparent 85%)`;
+                    zones.right.style.background = `linear-gradient(to left, ${cRight}, transparent 85%)`;
 
                     requestAnimationFrame(render);
                 }
@@ -120,18 +119,18 @@
                 function getAvg(data, pixels) {
                     let r = 0, g = 0, b = 0;
                     pixels.forEach(([x, y]) => {
-                        const i = (y * 8 + x) * 4;
+                        const i = (y * 10 + x) * 4;
                         r += data[i];
                         g += data[i+1];
                         b += data[i+2];
                     });
                     const l = pixels.length;
-                    // On booste un peu la saturation pour l'effet visuel (x1.1)
-                    return `rgba(${Math.min(255, (r/l)*1.1)}, ${Math.min(255, (g/l)*1.1)}, ${Math.min(255, (b/l)*1.1)}, 0.8)`;
+                    // Boost de luminosité sur le calcul pour compenser l'atténuation du flou
+                    return `rgba(${Math.min(255, (r/l)*1.2)}, ${Math.min(255, (g/l)*1.2)}, ${Math.min(255, (b/l)*1.2)}, 0.9)`;
                 }
 
             } catch (err) {
-                console.error("Erreur:", err);
+                console.error(err);
             }
         };
     </script>
