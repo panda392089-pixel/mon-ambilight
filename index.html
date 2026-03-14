@@ -2,235 +2,113 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Ambilight EXTREME</title>
+<title>Ambilight Frame</title>
 
 <style>
-
 body{
-margin:0;
-background:black;
-overflow:hidden;
-font-family:sans-serif;
+    margin:0;
+    background:#000;
+    overflow:hidden;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
 }
 
-#ambilight{
-position:fixed;
-top:0;
-left:0;
-width:100%;
-height:100%;
-pointer-events:none;
+/* cadre */
+#frame{
+    position:relative;
+    width:90vw;
+    height:90vh;
+    border-top:20px solid red;
+    border-left:20px solid red;
+    border-right:20px solid red;
+    box-shadow:
+        0 -40px 120px red,
+        -40px 0 120px red,
+        40px 0 120px red;
 }
 
-.zone{
-position:absolute;
-filter:blur(90px);
-opacity:0.95;
+/* canvas caché pour analyser l'image */
+#capture{
+    display:none;
 }
-
-.top{ top:0;height:35px }
-.left{ left:0;width:35px }
-.right{ right:0;width:35px }
-
-#ui{
-position:absolute;
-top:50%;
-left:50%;
-transform:translate(-50%,-50%);
-z-index:10;
-text-align:center;
-}
-
-button{
-padding:18px 35px;
-font-size:18px;
-background:#111;
-color:white;
-border:none;
-border-radius:10px;
-cursor:pointer;
-}
-
-canvas{
-display:none;
-}
-
 </style>
 </head>
 
 <body>
 
-<div id="ambilight"></div>
-
-<div id="ui">
-<h2 style="color:white">Ambilight EXTREME</h2>
-<button id="start">Démarrer</button>
-</div>
-
+<div id="frame"></div>
 <canvas id="capture"></canvas>
 
 <script>
 
-const topZones=120
-const sideZones=60
+const frame = document.getElementById("frame");
+const canvas = document.getElementById("capture");
+const ctx = canvas.getContext("2d");
 
-const ambilight=document.getElementById("ambilight")
+async function startCapture(){
 
-function createZones(){
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+        video:true
+    });
 
-for(let i=0;i<topZones;i++){
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    await video.play();
 
-let d=document.createElement("div")
-d.className="zone top"
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
-d.style.width=(100/topZones)+"%"
-d.style.left=(i*(100/topZones))+"%"
+    function update(){
 
-ambilight.appendChild(d)
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
+        const edge = 40;
+
+        const top = ctx.getImageData(0,0,canvas.width,edge);
+        const left = ctx.getImageData(0,0,edge,canvas.height);
+        const right = ctx.getImageData(canvas.width-edge,0,edge,canvas.height);
+
+        function averageColor(data){
+
+            let r=0,g=0,b=0,count=0;
+
+            for(let i=0;i<data.data.length;i+=4){
+
+                r+=data.data[i];
+                g+=data.data[i+1];
+                b+=data.data[i+2];
+                count++;
+            }
+
+            r=Math.floor(r/count);
+            g=Math.floor(g/count);
+            b=Math.floor(b/count);
+
+            return `rgb(${r},${g},${b})`;
+        }
+
+        const topColor = averageColor(top);
+        const leftColor = averageColor(left);
+        const rightColor = averageColor(right);
+
+        frame.style.borderTopColor = topColor;
+        frame.style.borderLeftColor = leftColor;
+        frame.style.borderRightColor = rightColor;
+
+        frame.style.boxShadow =
+            `0 -40px 120px ${topColor},
+             -40px 0 120px ${leftColor},
+             40px 0 120px ${rightColor}`;
+
+        requestAnimationFrame(update);
+    }
+
+    update();
 }
 
-for(let i=0;i<sideZones;i++){
-
-let l=document.createElement("div")
-l.className="zone left"
-
-l.style.height=(100/sideZones)+"%"
-l.style.top=(i*(100/sideZones))+"%"
-
-ambilight.appendChild(l)
-
-let r=document.createElement("div")
-r.className="zone right"
-
-r.style.height=(100/sideZones)+"%"
-r.style.top=(i*(100/sideZones))+"%"
-
-ambilight.appendChild(r)
-
-}
-
-}
-
-createZones()
-
-const canvas=document.getElementById("capture")
-const ctx=canvas.getContext("2d")
-
-let smoothMemory={}
-
-function smooth(id,col){
-
-if(!smoothMemory[id]) smoothMemory[id]=col
-
-let o=smoothMemory[id]
-
-o.r+=(col.r-o.r)*0.25
-o.g+=(col.g-o.g)*0.25
-o.b+=(col.b-o.b)*0.25
-
-return o
-
-}
-
-function average(data){
-
-let r=0,g=0,b=0,c=0
-
-for(let i=0;i<data.data.length;i+=4){
-
-r+=data.data[i]
-g+=data.data[i+1]
-b+=data.data[i+2]
-
-c++
-
-}
-
-r/=c
-g/=c
-b/=c
-
-let boost=1.2
-
-return {
-r:Math.min(r*boost,255),
-g:Math.min(g*boost,255),
-b:Math.min(b*boost,255)
-}
-
-}
-
-async function start(){
-
-document.getElementById("ui").remove()
-
-const stream=await navigator.mediaDevices.getDisplayMedia({
-video:true
-})
-
-const video=document.createElement("video")
-video.srcObject=stream
-await video.play()
-
-canvas.width=video.videoWidth
-canvas.height=video.videoHeight
-
-function loop(){
-
-ctx.drawImage(video,0,0)
-
-const topSize=canvas.width/topZones
-const sideSize=canvas.height/sideZones
-
-const tops=document.querySelectorAll(".top")
-
-tops.forEach((node,i)=>{
-
-let img=ctx.getImageData(i*topSize,0,topSize,40)
-
-let col=average(img)
-col=smooth("t"+i,col)
-
-node.style.background=`rgb(${col.r},${col.g},${col.b})`
-
-})
-
-const lefts=document.querySelectorAll(".left")
-
-lefts.forEach((node,i)=>{
-
-let img=ctx.getImageData(0,i*sideSize,40,sideSize)
-
-let col=average(img)
-col=smooth("l"+i,col)
-
-node.style.background=`rgb(${col.r},${col.g},${col.b})`
-
-})
-
-const rights=document.querySelectorAll(".right")
-
-rights.forEach((node,i)=>{
-
-let img=ctx.getImageData(canvas.width-40,i*sideSize,40,sideSize)
-
-let col=average(img)
-col=smooth("r"+i,col)
-
-node.style.background=`rgb(${col.r},${col.g},${col.b})`
-
-})
-
-requestAnimationFrame(loop)
-
-}
-
-loop()
-
-}
-
-document.getElementById("start").onclick=start
+startCapture();
 
 </script>
 
