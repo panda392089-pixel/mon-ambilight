@@ -2,113 +2,192 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Ambilight Frame</title>
+<title>Ambilight PRO</title>
 
 <style>
+
 body{
     margin:0;
     background:#000;
     overflow:hidden;
-    display:flex;
-    justify-content:center;
-    align-items:center;
+}
+
+#container{
+    position:relative;
+    width:100vw;
     height:100vh;
 }
 
-/* cadre */
-#frame{
-    position:relative;
-    width:90vw;
-    height:90vh;
-    border-top:20px solid red;
-    border-left:20px solid red;
-    border-right:20px solid red;
-    box-shadow:
-        0 -40px 120px red,
-        -40px 0 120px red,
-        40px 0 120px red;
+.segment{
+    position:absolute;
+    pointer-events:none;
+    filter: blur(60px);
+    opacity:0.9;
 }
 
-/* canvas caché pour analyser l'image */
-#capture{
+/* segments haut */
+.top{
+    height:20px;
+    top:0;
+}
+
+/* segments gauche */
+.left{
+    width:20px;
+    left:0;
+}
+
+/* segments droite */
+.right{
+    width:20px;
+    right:0;
+}
+
+canvas{
     display:none;
 }
+
+#start{
+    position:absolute;
+    z-index:10;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    padding:20px 40px;
+    font-size:18px;
+    cursor:pointer;
+}
+
 </style>
 </head>
 
 <body>
 
-<div id="frame"></div>
+<div id="container"></div>
+<button id="start">Démarrer Ambilight</button>
+
 <canvas id="capture"></canvas>
 
 <script>
 
-const frame = document.getElementById("frame");
-const canvas = document.getElementById("capture");
-const ctx = canvas.getContext("2d");
+const segmentsTop = 24
+const segmentsSide = 16
 
-async function startCapture(){
+const container = document.getElementById("container")
 
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-        video:true
-    });
+function createSegments(){
 
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    await video.play();
+    for(let i=0;i<segmentsTop;i++){
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+        const div = document.createElement("div")
+        div.className="segment top"
 
-    function update(){
+        div.style.width=(100/segmentsTop)+"%"
+        div.style.left=(i*(100/segmentsTop))+"%"
 
-        ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
-        const edge = 40;
-
-        const top = ctx.getImageData(0,0,canvas.width,edge);
-        const left = ctx.getImageData(0,0,edge,canvas.height);
-        const right = ctx.getImageData(canvas.width-edge,0,edge,canvas.height);
-
-        function averageColor(data){
-
-            let r=0,g=0,b=0,count=0;
-
-            for(let i=0;i<data.data.length;i+=4){
-
-                r+=data.data[i];
-                g+=data.data[i+1];
-                b+=data.data[i+2];
-                count++;
-            }
-
-            r=Math.floor(r/count);
-            g=Math.floor(g/count);
-            b=Math.floor(b/count);
-
-            return `rgb(${r},${g},${b})`;
-        }
-
-        const topColor = averageColor(top);
-        const leftColor = averageColor(left);
-        const rightColor = averageColor(right);
-
-        frame.style.borderTopColor = topColor;
-        frame.style.borderLeftColor = leftColor;
-        frame.style.borderRightColor = rightColor;
-
-        frame.style.boxShadow =
-            `0 -40px 120px ${topColor},
-             -40px 0 120px ${leftColor},
-             40px 0 120px ${rightColor}`;
-
-        requestAnimationFrame(update);
+        container.appendChild(div)
     }
 
-    update();
+    for(let i=0;i<segmentsSide;i++){
+
+        const left=document.createElement("div")
+        left.className="segment left"
+
+        left.style.height=(100/segmentsSide)+"%"
+        left.style.top=(i*(100/segmentsSide))+"%"
+
+        container.appendChild(left)
+
+        const right=document.createElement("div")
+        right.className="segment right"
+
+        right.style.height=(100/segmentsSide)+"%"
+        right.style.top=(i*(100/segmentsSide))+"%"
+
+        container.appendChild(right)
+    }
 }
 
-startCapture();
+createSegments()
+
+const canvas=document.getElementById("capture")
+const ctx=canvas.getContext("2d")
+
+async function start(){
+
+document.getElementById("start").remove()
+
+const stream = await navigator.mediaDevices.getDisplayMedia({
+    video:true
+})
+
+const video=document.createElement("video")
+video.srcObject=stream
+await video.play()
+
+canvas.width=video.videoWidth
+canvas.height=video.videoHeight
+
+function avg(data){
+
+let r=0,g=0,b=0,c=0
+
+for(let i=0;i<data.data.length;i+=4){
+
+r+=data.data[i]
+g+=data.data[i+1]
+b+=data.data[i+2]
+c++
+
+}
+
+return `rgb(${r/c},${g/c},${b/c})`
+
+}
+
+function update(){
+
+ctx.drawImage(video,0,0)
+
+const topSize=canvas.width/segmentsTop
+const sideSize=canvas.height/segmentsSide
+
+const nodes=document.querySelectorAll(".top")
+
+nodes.forEach((node,i)=>{
+
+const img=ctx.getImageData(i*topSize,0,topSize,20)
+node.style.background=avg(img)
+
+})
+
+const leftNodes=document.querySelectorAll(".left")
+
+leftNodes.forEach((node,i)=>{
+
+const img=ctx.getImageData(0,i*sideSize,20,sideSize)
+node.style.background=avg(img)
+
+})
+
+const rightNodes=document.querySelectorAll(".right")
+
+rightNodes.forEach((node,i)=>{
+
+const img=ctx.getImageData(canvas.width-20,i*sideSize,20,sideSize)
+node.style.background=avg(img)
+
+})
+
+requestAnimationFrame(update)
+
+}
+
+update()
+
+}
+
+document.getElementById("start").onclick=start
 
 </script>
 
