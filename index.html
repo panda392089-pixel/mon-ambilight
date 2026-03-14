@@ -2,153 +2,124 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Ambilight Pro - Perfect Realistic Frame</title>
+    <title>OBS Ambilight Pro Ultra - Physiquement Réaliste</title>
     <style>
-        body { margin: 0; overflow: hidden; background: transparent; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: transparent; font-family: 'Segoe UI', sans-serif; }
         
         #ambilight-wrapper {
             position: absolute;
-            /* Le cadre parfait : occupe tout l'espace */
             top: 0; left: 0;
             width: 100vw; height: 100vh;
             opacity: 0;
-            transition: opacity 1.5s ease;
+            transition: opacity 2s ease;
             pointer-events: none;
-            
-            /* C'est ici que la magie opère : */
-            /* On crée un masque interne pour contenir la lumière dans un cadre net */
-            /* mais dont le contenu sera flou. */
-            mask-image: linear-gradient(to bottom, transparent 2vh, black 5vh, black 95vh, transparent 98vh),
-                        linear-gradient(to right, transparent 2vw, black 5vw, black 95vw, transparent 98vw);
-            mask-composite: intersect;
-            -webkit-mask-composite: source-in; /* Compatibilité Chrome/OBS */
+            /* Masque pour laisser l'espace central vide (là où est votre vidéo OBS) */
+            mask-image: radial-gradient(circle, transparent 65%, black 100%);
+            -webkit-mask-image: radial-gradient(circle, transparent 65%, black 100%);
         }
 
         .glow-zone {
             position: absolute;
-            mix-blend-mode: screen; /* Fusion réaliste */
-            filter: blur(80px); /* Flou massif pour la douceur */
-            /* Transition rapide pour le réalisme, avec une courbe douce */
-            transition: background 0.1s cubic-bezier(0.4, 0, 0.2, 1); 
-        }
-
-        /* Répartition équitable et réaliste des zones */
-        #glow-top {
-            top: 0; left: 0; width: 100vw; height: 50vh;
-        }
-
-        #glow-left {
-            top: 0; left: 0; width: 50vw; height: 100vh;
-        }
-
-        #glow-right {
-            top: 0; right: 0; width: 50vw; height: 100vh;
+            mix-blend-mode: screen;
+            filter: blur(120px); /* Augmenté pour une diffusion plus douce */
+            transition: background 0.15s cubic-bezier(0.25, 0.1, 0.25, 1);
+            border-radius: 50%; /* Forme de l'ampoule pour la diffusion */
         }
 
         #start-btn {
-            position: fixed;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            padding: 20px 40px;
-            background: rgba(0,0,0,0.9);
-            color: #fff;
-            border: 1px solid #444;
-            cursor: pointer;
-            border-radius: 8px;
-            font-size: 1.1em;
-            z-index: 1000;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            padding: 15px 30px; background: #111; color: #0cf;
+            border: 2px solid #0cf; cursor: pointer; border-radius: 50px;
+            font-weight: bold; text-transform: uppercase; letter-spacing: 2px;
+            z-index: 1000; transition: 0.3s;
         }
+        #start-btn:hover { background: #0cf; color: #111; box-shadow: 0 0 20px #0cf; }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">ACTIVER LE CADRE RÉALISTE</button>
-    
-    <div id="ambilight-wrapper">
-        <div id="glow-top" class="glow-zone"></div>
-        <div id="glow-left" class="glow-zone"></div>
-        <div id="glow-right" class="glow-zone"></div>
-    </div>
-    
+    <button id="start-btn">Activer l'immersion réaliste</button>
+    <div id="ambilight-wrapper" id="container"></div>
     <canvas id="procCanvas" style="display:none;"></canvas>
 
     <script>
         const btn = document.getElementById('start-btn');
         const wrapper = document.getElementById('ambilight-wrapper');
-        const zones = {
-            top: document.getElementById('glow-top'),
-            left: document.getElementById('glow-left'),
-            right: document.getElementById('glow-right')
-        };
         const canvas = document.getElementById('procCanvas');
         const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+        
+        // Configuration des "LEDs" virtuelles
+        const LED_CONFIG = [
+            { id: 'top1', x: 20, y: 0, w: 30, h: 40 }, { id: 'top2', x: 50, y: 0, w: 30, h: 40 }, { id: 'top3', x: 80, y: 0, w: 30, h: 40 },
+            { id: 'right1', x: 100, y: 25, w: 40, h: 40 }, { id: 'right2', x: 100, y: 75, w: 40, h: 40 },
+            { id: 'bottom1', x: 80, y: 100, w: 30, h: 40 }, { id: 'bottom2', x: 50, y: 100, w: 30, h: 40 }, { id: 'bottom3', x: 20, y: 100, w: 30, h: 40 },
+            { id: 'left1', x: 0, y: 75, w: 40, h: 40 }, { id: 'left2', x: 0, y: 25, w: 40, h: 40 }
+        ];
+
+        let zonesElements = [];
+        let lastColors = {};
+
+        function initZones() {
+            LED_CONFIG.forEach(conf => {
+                const div = document.createElement('div');
+                div.className = 'glow-zone';
+                div.style.width = conf.w + 'vw';
+                div.style.height = conf.h + 'vh';
+                div.style.left = `calc(${conf.x}% - ${conf.w/2}vw)`;
+                div.style.top = `calc(${conf.y}% - ${conf.h/2}vh)`;
+                wrapper.appendChild(div);
+                zonesElements.push({ el: div, conf: conf });
+            });
+        }
+
+        // Fonction magique pour booster la saturation et la luminosité
+        function adjustColor(r, g, b) {
+            const factor = 1.4; // Boost de saturation
+            const max = Math.max(r, g, b);
+            r = Math.min(255, r + (max - r) * 0.2) * factor;
+            g = Math.min(255, g + (max - g) * 0.2) * factor;
+            b = Math.min(255, b + (max - b) * 0.2) * factor;
+            return `rgb(${r},${g},${b})`;
+        }
 
         btn.onclick = async () => {
             try {
                 const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { width: 320, height: 180, frameRate: 60 }, // Très basse res = très rapide
-                    audio: false
+                    video: { width: 160, height: 90, frameRate: 30 }
                 });
-
                 const video = document.createElement('video');
                 video.srcObject = stream;
                 video.play();
 
                 btn.style.display = 'none';
                 wrapper.style.opacity = '1';
+                initZones();
 
                 video.onplaying = () => {
-                    canvas.width = 8; // Grille 8x8 pour réactivité max
-                    canvas.height = 8;
+                    canvas.width = 16;
+                    canvas.height = 9;
                     render();
                 };
 
                 function render() {
                     if (video.paused || video.ended) return;
-
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-                    // Analyse douce : on prend la moyenne de tout le bord
-                    const cTop = getAvg(data, 'top');
-                    const cLeft = getAvg(data, 'left');
-                    const cRight = getAvg(data, 'right');
+                    zonesElements.forEach(zone => {
+                        const { x, y } = zone.conf;
+                        // On échantillonne la zone correspondante dans le canvas 16x9
+                        const canvasX = Math.floor((x / 100) * 15);
+                        const canvasY = Math.floor((y / 100) * 8);
+                        const i = (canvasY * 16 + canvasX) * 4;
 
-                    // Gradients inverses : la couleur part du centre vers le bord
-                    zones.top.style.background = `radial-gradient(ellipse at 50% 20%, ${cTop}, transparent 70%)`;
-                    zones.left.style.background = `radial-gradient(ellipse at 20% 50%, ${cLeft}, transparent 70%)`;
-                    zones.right.style.background = `radial-gradient(ellipse at 80% 50%, ${cRight}, transparent 70%)`;
+                        const color = adjustColor(data[i], data[i+1], data[i+2]);
+                        zone.el.style.background = `radial-gradient(circle, ${color} 0%, transparent 80%)`;
+                    });
 
                     requestAnimationFrame(render);
                 }
-
-                function getAvg(data, side) {
-                    let r = 0, g = 0, b = 0, count = 0;
-                    
-                    for (let y = 0; y < 8; y++) {
-                        for (let x = 0; x < 8; x++) {
-                            let select = false;
-                            if (side === 'top' && y < 3) select = true;
-                            if (side === 'left' && x < 3) select = true;
-                            if (side === 'right' && x > 4) select = true;
-
-                            if (select) {
-                                const i = (y * 8 + x) * 4;
-                                r += data[i];
-                                g += data[i+1];
-                                b += data[i+2];
-                                count++;
-                            }
-                        }
-                    }
-                    // Densité réaliste (0.7) et pas de boost artificiel pour le réalisme
-                    return `rgba(${Math.floor(r/count)}, ${Math.floor(g/count)}, ${Math.floor(b/count)}, 0.7)`;
-                }
-
-            } catch (err) {
-                console.error(err);
-            }
+            } catch (err) { console.error(err); }
         };
     </script>
 </body>
