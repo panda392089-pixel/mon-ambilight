@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ambilight Gaming Ultra Reactive</title>
+<title>Ambilight Gaming Pro</title>
 
 <style>
 
@@ -32,7 +32,7 @@ pointer-events:none;
 z-index:-1;
 }
 
-/* halos */
+/* halos lumineux */
 
 .glow-zone{
 position:absolute;
@@ -89,13 +89,13 @@ z-index:10;
 }
 
 button{
-padding:18px 40px;
+padding:20px 40px;
 font-size:18px;
+font-weight:bold;
 background:transparent;
 border:2px solid white;
 color:white;
 cursor:pointer;
-font-weight:bold;
 }
 
 button:hover{
@@ -151,7 +151,7 @@ right:document.getElementById("z-right"),
 bottom:document.getElementById("z-bottom")
 }
 
-/* zones */
+/* mapping pixels */
 
 const zones={
 top:{x:1,y:0},
@@ -160,13 +160,13 @@ right:{x:2,y:1},
 bottom:{x:1,y:2}
 }
 
-const SATURATION_BOOST=1.6
+const SATURATION_BOOST = 1.6
 
-btn.onclick=async()=>{
+btn.onclick = async()=>{
 
 try{
 
-const stream=await navigator.mediaDevices.getDisplayMedia({
+const stream = await navigator.mediaDevices.getDisplayMedia({
 
 video:{
 width:{ideal:64},
@@ -178,55 +178,56 @@ audio:false
 
 })
 
-const video=document.createElement("video")
+const video = document.createElement("video")
 
-video.srcObject=stream
-video.muted=true
+video.srcObject = stream
+video.muted = true
 
 await video.play()
 
 document.getElementById("ui-layer").style.display="none"
 
-canvas.width=3
-canvas.height=3
+canvas.width = 3
+canvas.height = 3
 
 video.requestVideoFrameCallback(renderLoop)
 
-/* boucle ultra rapide */
-
 function renderLoop(){
 
-if(video.paused||video.ended) return
+if(video.paused || video.ended) return
 
 ctx.drawImage(video,0,0,3,3)
 
-const data=ctx.getImageData(0,0,3,3).data
+const data = ctx.getImageData(0,0,3,3).data
 
 for(let id in zones){
 
-const z=zones[id]
+const z = zones[id]
 
-const i=(z.y*3+z.x)*4
+const i = (z.y*3+z.x)*4
 
 let r=data[i]
 let g=data[i+1]
 let b=data[i+2]
 
-const gray=0.2989*r+0.587*g+0.114*b
+const gray = 0.2989*r + 0.587*g + 0.114*b
 
-r=Math.max(0,Math.min(255,gray+(r-gray)*SATURATION_BOOST))
-g=Math.max(0,Math.min(255,gray+(g-gray)*SATURATION_BOOST))
-b=Math.max(0,Math.min(255,gray+(b-gray)*SATURATION_BOOST))
+r = Math.max(0,Math.min(255,gray+(r-gray)*SATURATION_BOOST))
+g = Math.max(0,Math.min(255,gray+(g-gray)*SATURATION_BOOST))
+b = Math.max(0,Math.min(255,gray+(b-gray)*SATURATION_BOOST))
 
-const el=elements[id]
+const el = elements[id]
 
-el.style.background=`radial-gradient(
+/* halo circulaire doux */
+
+el.style.background = `radial-gradient(
 circle at center,
-rgba(${r},${g},${b},0.9) 0%,
-rgba(${r},${g},${b},0.6) 25%,
-rgba(${r},${g},${b},0.35) 45%,
-rgba(${r},${g},${b},0.15) 60%,
-rgba(${r},${g},${b},0) 80%
+rgba(${r},${g},${b},0.95) 0%,
+rgba(${r},${g},${b},0.65) 20%,
+rgba(${r},${g},${b},0.40) 40%,
+rgba(${r},${g},${b},0.20) 60%,
+rgba(${r},${g},${b},0.05) 75%,
+rgba(${r},${g},${b},0) 100%
 )`
 
 }
