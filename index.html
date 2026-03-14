@@ -2,60 +2,64 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Ambilight PRO</title>
+<title>Ambilight ULTRA</title>
 
 <style>
 
 body{
-    margin:0;
-    background:#000;
-    overflow:hidden;
+margin:0;
+background:black;
+overflow:hidden;
 }
 
 #container{
-    position:relative;
-    width:100vw;
-    height:100vh;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+pointer-events:none;
 }
 
 .segment{
-    position:absolute;
-    pointer-events:none;
-    filter: blur(60px);
-    opacity:0.9;
+position:absolute;
+filter:blur(80px);
+opacity:0.95;
+transition:background 0.08s linear;
 }
 
-/* segments haut */
 .top{
-    height:20px;
-    top:0;
+top:0;
+height:25px;
 }
 
-/* segments gauche */
 .left{
-    width:20px;
-    left:0;
+left:0;
+width:25px;
 }
 
-/* segments droite */
 .right{
-    width:20px;
-    right:0;
-}
-
-canvas{
-    display:none;
+right:0;
+width:25px;
 }
 
 #start{
-    position:absolute;
-    z-index:10;
-    left:50%;
-    top:50%;
-    transform:translate(-50%,-50%);
-    padding:20px 40px;
-    font-size:18px;
-    cursor:pointer;
+position:absolute;
+z-index:10;
+left:50%;
+top:50%;
+transform:translate(-50%,-50%);
+padding:20px 40px;
+font-size:20px;
+cursor:pointer;
+border:none;
+background:#111;
+color:white;
+border-radius:10px;
+}
+
+canvas{
+display:none;
 }
 
 </style>
@@ -64,61 +68,104 @@ canvas{
 <body>
 
 <div id="container"></div>
-<button id="start">Démarrer Ambilight</button>
+
+<button id="start">Lancer Ambilight ULTRA</button>
 
 <canvas id="capture"></canvas>
 
 <script>
 
-const segmentsTop = 24
-const segmentsSide = 16
+const topZones = 60
+const sideZones = 30
 
 const container = document.getElementById("container")
 
-function createSegments(){
+function createZones(){
 
-    for(let i=0;i<segmentsTop;i++){
+for(let i=0;i<topZones;i++){
 
-        const div = document.createElement("div")
-        div.className="segment top"
+let div=document.createElement("div")
 
-        div.style.width=(100/segmentsTop)+"%"
-        div.style.left=(i*(100/segmentsTop))+"%"
+div.className="segment top"
 
-        container.appendChild(div)
-    }
+div.style.width=(100/topZones)+"%"
+div.style.left=(i*(100/topZones))+"%"
 
-    for(let i=0;i<segmentsSide;i++){
+container.appendChild(div)
 
-        const left=document.createElement("div")
-        left.className="segment left"
-
-        left.style.height=(100/segmentsSide)+"%"
-        left.style.top=(i*(100/segmentsSide))+"%"
-
-        container.appendChild(left)
-
-        const right=document.createElement("div")
-        right.className="segment right"
-
-        right.style.height=(100/segmentsSide)+"%"
-        right.style.top=(i*(100/segmentsSide))+"%"
-
-        container.appendChild(right)
-    }
 }
 
-createSegments()
+for(let i=0;i<sideZones;i++){
+
+let left=document.createElement("div")
+left.className="segment left"
+
+left.style.height=(100/sideZones)+"%"
+left.style.top=(i*(100/sideZones))+"%"
+
+container.appendChild(left)
+
+let right=document.createElement("div")
+right.className="segment right"
+
+right.style.height=(100/sideZones)+"%"
+right.style.top=(i*(100/sideZones))+"%"
+
+container.appendChild(right)
+
+}
+
+}
+
+createZones()
 
 const canvas=document.getElementById("capture")
 const ctx=canvas.getContext("2d")
+
+let smoothColors={}
+
+function smooth(id,newColor){
+
+if(!smoothColors[id]) smoothColors[id]=newColor
+
+let old=smoothColors[id]
+
+old.r+= (newColor.r-old.r)*0.35
+old.g+= (newColor.g-old.g)*0.35
+old.b+= (newColor.b-old.b)*0.35
+
+return old
+
+}
+
+function average(data){
+
+let r=0,g=0,b=0,c=0
+
+for(let i=0;i<data.data.length;i+=4){
+
+r+=data.data[i]
+g+=data.data[i+1]
+b+=data.data[i+2]
+
+c++
+
+}
+
+return {
+r:r/c,
+g:g/c,
+b:b/c
+}
+
+}
 
 async function start(){
 
 document.getElementById("start").remove()
 
 const stream = await navigator.mediaDevices.getDisplayMedia({
-    video:true
+video:true
 })
 
 const video=document.createElement("video")
@@ -128,54 +175,49 @@ await video.play()
 canvas.width=video.videoWidth
 canvas.height=video.videoHeight
 
-function avg(data){
-
-let r=0,g=0,b=0,c=0
-
-for(let i=0;i<data.data.length;i+=4){
-
-r+=data.data[i]
-g+=data.data[i+1]
-b+=data.data[i+2]
-c++
-
-}
-
-return `rgb(${r/c},${g/c},${b/c})`
-
-}
-
 function update(){
 
 ctx.drawImage(video,0,0)
 
-const topSize=canvas.width/segmentsTop
-const sideSize=canvas.height/segmentsSide
+const topSize=canvas.width/topZones
+const sideSize=canvas.height/sideZones
 
-const nodes=document.querySelectorAll(".top")
+const tops=document.querySelectorAll(".top")
 
-nodes.forEach((node,i)=>{
+tops.forEach((node,i)=>{
 
-const img=ctx.getImageData(i*topSize,0,topSize,20)
-node.style.background=avg(img)
+const img=ctx.getImageData(i*topSize,0,topSize,30)
 
-})
+let col=average(img)
+col=smooth("t"+i,col)
 
-const leftNodes=document.querySelectorAll(".left")
-
-leftNodes.forEach((node,i)=>{
-
-const img=ctx.getImageData(0,i*sideSize,20,sideSize)
-node.style.background=avg(img)
+node.style.background=`rgb(${col.r},${col.g},${col.b})`
 
 })
 
-const rightNodes=document.querySelectorAll(".right")
+const lefts=document.querySelectorAll(".left")
 
-rightNodes.forEach((node,i)=>{
+lefts.forEach((node,i)=>{
 
-const img=ctx.getImageData(canvas.width-20,i*sideSize,20,sideSize)
-node.style.background=avg(img)
+const img=ctx.getImageData(0,i*sideSize,30,sideSize)
+
+let col=average(img)
+col=smooth("l"+i,col)
+
+node.style.background=`rgb(${col.r},${col.g},${col.b})`
+
+})
+
+const rights=document.querySelectorAll(".right")
+
+rights.forEach((node,i)=>{
+
+const img=ctx.getImageData(canvas.width-30,i*sideSize,30,sideSize)
+
+let col=average(img)
+col=smooth("r"+i,col)
+
+node.style.background=`rgb(${col.r},${col.g},${col.b})`
 
 })
 
