@@ -2,85 +2,67 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Ambilight Pro Ultra - Physiquement Réaliste</title>
+    <title>OBS Ambilight - Cloud Diffusion</title>
     <style>
-        body { margin: 0; overflow: hidden; background: transparent; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background: transparent; }
         
         #ambilight-wrapper {
             position: absolute;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
+            top: -10vh; left: -10vw; /* On dépasse de l'écran pour que le nuage soit large */
+            width: 120vw; height: 120vh;
             opacity: 0;
             transition: opacity 2s ease;
             pointer-events: none;
-            /* Masque pour laisser l'espace central vide (là où est votre vidéo OBS) */
-            mask-image: radial-gradient(circle, transparent 65%, black 100%);
-            -webkit-mask-image: radial-gradient(circle, transparent 65%, black 100%);
         }
 
         .glow-zone {
             position: absolute;
             mix-blend-mode: screen;
-            filter: blur(120px); /* Augmenté pour une diffusion plus douce */
-            transition: background 0.15s cubic-bezier(0.25, 0.1, 0.25, 1);
-            border-radius: 50%; /* Forme de l'ampoule pour la diffusion */
+            /* Le secret du nuage : un flou immense et une opacité réduite */
+            filter: blur(180px); 
+            opacity: 0.8;
+            border-radius: 50%;
+            transition: background 0.2s ease-out;
         }
+
+        /* Configuration des 8 zones principales pour un mélange fluide */
+        .zone-top    { top: 5%; width: 40%; height: 40%; }
+        .zone-side   { top: 30%; width: 35%; height: 50%; }
+        .zone-bottom { bottom: 5%; width: 40%; height: 40%; }
 
         #start-btn {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            padding: 15px 30px; background: #111; color: #0cf;
-            border: 2px solid #0cf; cursor: pointer; border-radius: 50px;
-            font-weight: bold; text-transform: uppercase; letter-spacing: 2px;
-            z-index: 1000; transition: 0.3s;
+            padding: 20px 40px; background: rgba(0,0,0,0.8); color: white;
+            border: 1px solid #555; cursor: pointer; border-radius: 5px; z-index: 100;
         }
-        #start-btn:hover { background: #0cf; color: #111; box-shadow: 0 0 20px #0cf; }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">Activer l'immersion réaliste</button>
-    <div id="ambilight-wrapper" id="container"></div>
+    <button id="start-btn">ACTIVER LE NUAGE DE LUMIÈRE</button>
+    
+    <div id="ambilight-wrapper">
+        <div id="z-tl" class="glow-zone zone-top" style="left: 10%;"></div>
+        <div id="z-tr" class="glow-zone zone-top" style="right: 10%;"></div>
+        <div id="z-ml" class="glow-zone zone-side" style="left: -5%;"></div>
+        <div id="z-mr" class="glow-zone zone-side" style="right: -5%;"></div>
+        <div id="z-bl" class="glow-zone zone-bottom" style="left: 15%;"></div>
+        <div id="z-br" class="glow-zone zone-bottom" style="right: 15%;"></div>
+    </div>
+    
     <canvas id="procCanvas" style="display:none;"></canvas>
 
     <script>
         const btn = document.getElementById('start-btn');
         const wrapper = document.getElementById('ambilight-wrapper');
         const canvas = document.getElementById('procCanvas');
-        const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
-        
-        // Configuration des "LEDs" virtuelles
-        const LED_CONFIG = [
-            { id: 'top1', x: 20, y: 0, w: 30, h: 40 }, { id: 'top2', x: 50, y: 0, w: 30, h: 40 }, { id: 'top3', x: 80, y: 0, w: 30, h: 40 },
-            { id: 'right1', x: 100, y: 25, w: 40, h: 40 }, { id: 'right2', x: 100, y: 75, w: 40, h: 40 },
-            { id: 'bottom1', x: 80, y: 100, w: 30, h: 40 }, { id: 'bottom2', x: 50, y: 100, w: 30, h: 40 }, { id: 'bottom3', x: 20, y: 100, w: 30, h: 40 },
-            { id: 'left1', x: 0, y: 75, w: 40, h: 40 }, { id: 'left2', x: 0, y: 25, w: 40, h: 40 }
-        ];
+        const ctx = canvas.getContext('2d', { alpha: false });
 
-        let zonesElements = [];
-        let lastColors = {};
-
-        function initZones() {
-            LED_CONFIG.forEach(conf => {
-                const div = document.createElement('div');
-                div.className = 'glow-zone';
-                div.style.width = conf.w + 'vw';
-                div.style.height = conf.h + 'vh';
-                div.style.left = `calc(${conf.x}% - ${conf.w/2}vw)`;
-                div.style.top = `calc(${conf.y}% - ${conf.h/2}vh)`;
-                wrapper.appendChild(div);
-                zonesElements.push({ el: div, conf: conf });
-            });
-        }
-
-        // Fonction magique pour booster la saturation et la luminosité
-        function adjustColor(r, g, b) {
-            const factor = 1.4; // Boost de saturation
-            const max = Math.max(r, g, b);
-            r = Math.min(255, r + (max - r) * 0.2) * factor;
-            g = Math.min(255, g + (max - g) * 0.2) * factor;
-            b = Math.min(255, b + (max - b) * 0.2) * factor;
-            return `rgb(${r},${g},${b})`;
-        }
+        const zones = {
+            'z-tl': { x: 2, y: 2 }, 'z-tr': { x: 6, y: 2 },
+            'z-ml': { x: 1, y: 4 }, 'z-mr': { x: 7, y: 4 },
+            'z-bl': { x: 2, y: 6 }, 'z-br': { x: 6, y: 6 }
+        };
 
         btn.onclick = async () => {
             try {
@@ -90,36 +72,36 @@
                 const video = document.createElement('video');
                 video.srcObject = stream;
                 video.play();
-
                 btn.style.display = 'none';
                 wrapper.style.opacity = '1';
-                initZones();
 
                 video.onplaying = () => {
-                    canvas.width = 16;
-                    canvas.height = 9;
+                    canvas.width = 8; canvas.height = 8;
                     render();
                 };
 
                 function render() {
                     if (video.paused || video.ended) return;
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                    ctx.drawImage(video, 0, 0, 8, 8);
+                    const data = ctx.getImageData(0, 0, 8, 8).data;
 
-                    zonesElements.forEach(zone => {
-                        const { x, y } = zone.conf;
-                        // On échantillonne la zone correspondante dans le canvas 16x9
-                        const canvasX = Math.floor((x / 100) * 15);
-                        const canvasY = Math.floor((y / 100) * 8);
-                        const i = (canvasY * 16 + canvasX) * 4;
-
-                        const color = adjustColor(data[i], data[i+1], data[i+2]);
-                        zone.el.style.background = `radial-gradient(circle, ${color} 0%, transparent 80%)`;
-                    });
-
+                    for (let id in zones) {
+                        const pos = zones[id];
+                        const i = (pos.y * 8 + pos.x) * 4;
+                        
+                        // Traitement "Nuage" : on sature et on évite le noir complet
+                        let r = Math.max(data[i], 10);
+                        let g = Math.max(data[i+1], 10);
+                        let b = Math.max(data[i+2], 10);
+                        
+                        // Boost de vibrance pour l'effet "glow"
+                        const color = `rgba(${r*1.2}, ${g*1.2}, ${b*1.2}, 0.6)`;
+                        document.getElementById(id).style.background = 
+                            `radial-gradient(circle, ${color} 0%, transparent 70%)`;
+                    }
                     requestAnimationFrame(render);
                 }
-            } catch (err) { console.error(err); }
+            } catch (err) { console.log(err); }
         };
     </script>
 </body>
