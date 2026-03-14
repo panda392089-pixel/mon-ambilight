@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Ambilight Ultra-Diffusion Pro</title>
+    <title>Ambilight Ultra-Diffusion</title>
     <style>
         body {
             background: #000;
@@ -12,48 +12,66 @@
             height: 100vh;
         }
 
+        /* Le conteneur ne doit pas rogner les débordements (pas d'overflow hidden ici) */
         #ambilight-wrapper {
             position: fixed;
-            top: -10%; left: -10%;
-            width: 120%; height: 120%;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             pointer-events: none;
             z-index: -1;
-            /* Augmentation du flou pour une fusion parfaite des couleurs */
-            filter: blur(150px) saturate(1.5); 
-            display: grid;
-            /* Grille de 3x3 pour couvrir les bords et les coins */
-            grid-template-columns: 1fr 2fr 1fr;
-            grid-template-rows: 1fr 2fr 1fr;
+            /* Le flou est appliqué ici sur tout le groupe pour une fusion parfaite */
+            filter: blur(120px); 
         }
 
         .glow-zone {
-            width: 100%;
-            height: 100%;
-            transition: background 0.1s linear; /* Lissage subtil */
+            position: absolute;
+            border-radius: 50%; /* Forme circulaire parfaite */
+            opacity: 0.7;
+            mix-blend-mode: screen;
             will-change: background;
         }
 
-        /* On laisse le centre vide (grid-area: 2/2) pour ne pas polluer l'image */
+        /* On place les centres HORS de l'écran pour que seule la "traine" lumineuse rentre */
+        #z-top {
+            top: -20%; left: 10%;
+            width: 80%; height: 40%;
+        }
+
+        #z-left {
+            top: 10%; left: -20%;
+            width: 40%; height: 80%;
+        }
+
+        #z-right {
+            top: 10%; right: -20%;
+            width: 40%; height: 80%;
+        }
+
+        #z-bottom {
+            bottom: -20%; left: 10%;
+            width: 80%; height: 40%;
+        }
 
         #ui-layer {
             position: fixed;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
+            text-align: center;
             z-index: 10;
+            color: white;
+            font-family: sans-serif;
         }
 
         button {
             padding: 15px 30px;
-            background: rgba(255,255,255,0.1);
+            background: none;
             border: 2px solid white;
             color: white;
             cursor: pointer;
-            backdrop-filter: blur(5px);
             font-weight: bold;
-            transition: 0.3s;
         }
-        
-        button:hover { background: white; color: black; }
 
         canvas { display: none; }
     </style>
@@ -65,14 +83,10 @@
     </div>
 
     <div id="ambilight-wrapper">
-        <div id="z-0" class="glow-zone" style="grid-area: 1/1"></div>
-        <div id="z-1" class="glow-zone" style="grid-area: 1/2"></div>
-        <div id="z-2" class="glow-zone" style="grid-area: 1/3"></div>
-        <div id="z-3" class="glow-zone" style="grid-area: 2/1"></div>
-        <div id="z-5" class="glow-zone" style="grid-area: 2/3"></div>
-        <div id="z-6" class="glow-zone" style="grid-area: 3/1"></div>
-        <div id="z-7" class="glow-zone" style="grid-area: 3/2"></div>
-        <div id="z-8" class="glow-zone" style="grid-area: 3/3"></div>
+        <div id="z-top" class="glow-zone"></div>
+        <div id="z-left" class="glow-zone"></div>
+        <div id="z-right" class="glow-zone"></div>
+        <div id="z-bottom" class="glow-zone"></div>
     </div>
 
     <canvas id="procCanvas"></canvas>
@@ -80,28 +94,30 @@
     <script>
         const btn = document.getElementById("start-btn");
         const canvas = document.getElementById("procCanvas");
-        const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
-        
-        // On passe sur une grille 3x3 (9 zones) pour capturer les coins
-        const zonesElements = [];
-        for(let i=0; i<9; i++) {
-            if(i === 4) continue; // On ignore le centre
-            zonesElements[i] = document.getElementById(`z-${i}`);
-        }
+        const ctx = canvas.getContext("2d", { alpha: false });
+        const elements = {
+            top: document.getElementById("z-top"),
+            left: document.getElementById("z-left"),
+            right: document.getElementById("z-right"),
+            bottom: document.getElementById("z-bottom")
+        };
+        const zones = {
+            top: { x: 1, y: 0 },
+            left: { x: 0, y: 1 },
+            right: { x: 2, y: 1 },
+            bottom: { x: 1, y: 2 }
+        };
 
         btn.onclick = async () => {
             try {
                 const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { cursor: "never" },
-                    audio: false
+                    video: { width: 32, height: 18, frameRate: 60 }
                 });
                 const video = document.createElement("video");
                 video.srcObject = stream;
                 await video.play();
 
                 document.getElementById("ui-layer").style.display = "none";
-                
-                // Résolution ultra basse pour la performance, mais suffisante pour des couleurs moyennes
                 canvas.width = 3;
                 canvas.height = 3;
 
@@ -109,26 +125,15 @@
                     ctx.drawImage(video, 0, 0, 3, 3);
                     const data = ctx.getImageData(0, 0, 3, 3).data;
 
-                    for (let i = 0; i < 9; i++) {
-                        if (i === 4) continue;
-                        const pixelIdx = i * 4;
-                        const r = data[pixelIdx];
-                        const g = data[pixelIdx + 1];
-                        const b = data[pixelIdx + 2];
-                        
-                        // Application de la couleur
-                        zonesElements[i].style.backgroundColor = `rgb(${r},${g},${b})`;
+                    for (let id in zones) {
+                        const i = (zones[id].y * 3 + zones[id].x) * 4;
+                        // On utilise directement la couleur pleine, le filter:blur(120px) fera le reste
+                        elements[id].style.backgroundColor = `rgb(${data[i]},${data[i+1]},${data[i+2]})`;
                     }
-                    
-                    if ('requestVideoFrameCallback' in video) {
-                        video.requestVideoFrameCallback(render);
-                    } else {
-                        requestAnimationFrame(render);
-                    }
+                    video.requestVideoFrameCallback(render);
                 };
-                render();
-                
-            } catch (e) { console.error("Erreur d'accès à l'écran:", e); }
+                video.requestVideoFrameCallback(render);
+            } catch (e) { console.error(e); }
         };
     </script>
 </body>
