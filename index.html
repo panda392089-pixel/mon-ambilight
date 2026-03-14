@@ -1,41 +1,105 @@
 <!DOCTYPE html>
-<html>
-<body style="background:transparent; margin:0; display:flex; justify-content:center; align-items:center; height:100vh;">
-    <button id="btn" style="padding:20px; cursor:pointer;">LANCER L'AMBILIGHT</button>
-    <div id="amb" style="width:1087px; height:669px; filter:blur(100px); border-radius:50px; position:absolute; z-index:-1;"></div>
-    <canvas id="c" style="display:none;"></canvas>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            margin: 0; padding: 0;
+            background: #050505; 
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Le cadre de l'écran 838x587 */
+        #ambilight-frame {
+            width: 838px;
+            height: 587px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            position: relative;
+            background: transparent;
+            
+            transition: box-shadow 0.2s ease-out;
+            
+            /* FONCTIONNEMENT DES OMBRES :
+               On utilise des valeurs négatives sur le deuxième paramètre (Y) 
+               pour déplacer la lueur vers le haut.
+            */
+            box-shadow: 
+                0px -20px 40px var(--glow-color),   /* Lueur proche vers le haut */
+                -30px -40px 80px var(--glow-color), /* Côté gauche + haut */
+                30px -40px 80px var(--glow-color),  /* Côté droit + haut */
+                0px -80px 150px var(--glow-color);  /* Grande diffusion plafond */
+        }
+
+        #start-btn {
+            position: fixed;
+            z-index: 10;
+            padding: 15px 25px;
+            background: #111; color: #0ff;
+            border: 1px solid #0ff; cursor: pointer;
+            font-family: sans-serif; text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <button id="start-btn">Démarrer l'ambilight</button>
+    
+    <div id="ambilight-frame" style="--glow-color: rgba(0,0,0,0);"></div>
+    
+    <canvas id="proc-canvas" style="display:none;"></canvas>
 
     <script>
-        const btn = document.getElementById('btn');
-        const amb = document.getElementById('amb');
-        const canvas = document.getElementById('c');
-        const ctx = canvas.getContext('2d', {willReadFrequently: true});
+        const frame = document.getElementById('ambilight-frame');
+        const btn = document.getElementById('start-btn');
+        const canvas = document.getElementById('proc-canvas');
+        const ctx = canvas.getContext('2d', { WILL_READ_FREQUENTLY: true });
 
         btn.onclick = async () => {
             try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({video:true});
+                const stream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: { cursor: "never" }, 
+                    audio: false 
+                });
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.play();
+                
                 btn.style.display = 'none';
-                const v = document.createElement('video');
-                v.srcObject = stream;
-                v.play();
-                v.onloadedmetadata = () => {
-                    canvas.width = 16; canvas.height = 16;
-                    const update = () => {
-                        ctx.drawImage(v, 0, 0, 16, 16);
-                        const d = ctx.getImageData(0,0,16,16).data;
-                        let r=0, g=0, b=0;
-                        for(let i=0; i<d.length; i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; }
-                        let count = d.length/4;
-                        let color = `rgb(${~~(r/count)},${~~(g/count)},${~~(b/count)})`;
-                        amb.style.background = color;
-                        amb.style.boxShadow = `0 0 150px ${color}`;
+
+                video.onloadedmetadata = () => {
+                    canvas.width = 64; 
+                    canvas.height = 64;
+                    
+                    function update() {
+                        if (video.paused || video.ended) return;
+                        
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                        
+                        let r = 0, g = 0, b = 0;
+                        for (let i = 0; i < imageData.length; i += 4) {
+                            r += imageData[i];
+                            g += imageData[i+1];
+                            b += imageData[i+2];
+                        }
+                        
+                        const pixelCount = imageData.length / 4;
+                        r = Math.round(r / pixelCount);
+                        g = Math.round(g / pixelCount);
+                        b = Math.round(b / pixelCount);
+
+                        // On augmente un peu l'opacité (0.9) pour compenser le décalage vers le haut
+                        const colorStr = `rgba(${r}, ${g}, ${b}, 0.9)`;
+                        frame.style.setProperty('--glow-color', colorStr);
+                        
                         requestAnimationFrame(update);
-                    };
+                    }
                     update();
                 };
-            } catch (e) {
-                alert("Erreur de permission : " + e);
-            }
+            } catch (err) { console.error(err); }
         };
     </script>
 </body>
