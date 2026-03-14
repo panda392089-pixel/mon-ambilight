@@ -2,42 +2,41 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Ambilight Pro - Ultra Soft Edge</title>
+    <title>OBS Ambilight Rectangulaire - Ultra Soft & Fast</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; font-family: sans-serif; }
         
         #ambilight-wrapper {
             position: absolute;
             top: 0; left: 0;
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
+            width: 100vw; height: 100vh;
             opacity: 0;
-            transition: opacity 2s ease;
-        }
-
-        /* Les zones de projection */
-        .glow-zone {
-            position: absolute;
-            filter: blur(80px); /* Flou massif pour la douceur */
-            mix-blend-mode: screen; /* Fusionne mieux avec les fonds sombres */
+            transition: opacity 1s ease;
             pointer-events: none;
         }
 
+        /* Zones de projection rectangulaires */
+        .glow-zone {
+            position: absolute;
+            filter: blur(60px); /* Lissage des bords du rectangle */
+            mix-blend-mode: screen;
+            /* Transition courte pour la réactivité, mais assez longue pour la douceur */
+            transition: background 0.15s linear; 
+        }
+
         #glow-top {
-            top: -10vh; left: 10vw; width: 80vw; height: 30vh;
-            border-radius: 50% 50% 0 0;
+            top: 0; left: 5vw;
+            width: 90vw; height: 25vh;
         }
 
         #glow-left {
-            top: 10vh; left: -10vw; width: 30vw; height: 80vh;
-            border-radius: 50% 0 0 50%;
+            top: 5vh; left: 0;
+            width: 25vw; height: 90vh;
         }
 
         #glow-right {
-            top: 10vh; right: -10vw; width: 30vw; height: 80vh;
-            border-radius: 0 50% 50% 0;
+            top: 5vh; right: 0;
+            width: 25vw; height: 90vh;
         }
 
         #start-btn {
@@ -45,18 +44,19 @@
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             padding: 20px 30px;
-            background: #1a1a1a;
-            color: white;
-            border: 1px solid #444;
+            background: #111;
+            color: #55acee;
+            border: 2px solid #55acee;
             cursor: pointer;
-            border-radius: 12px;
+            border-radius: 8px;
+            font-weight: bold;
             z-index: 1000;
         }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">ACTIVER L'EFFET DOUX (HAUT/CÔTÉS)</button>
+    <button id="start-btn">ACTIVER AMBILIGHT RECTANGULAIRE</button>
     
     <div id="ambilight-wrapper">
         <div id="glow-top" class="glow-zone"></div>
@@ -75,12 +75,12 @@
             right: document.getElementById('glow-right')
         };
         const canvas = document.getElementById('procCanvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
 
         btn.onclick = async () => {
             try {
                 const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { width: 640, height: 360 }, // Résolution basse = meilleure performance
+                    video: { width: 480, height: 270, frameRate: 60 }, // Haute fréquence, basse res
                     audio: false
                 });
 
@@ -92,47 +92,46 @@
                 wrapper.style.opacity = '1';
 
                 video.onplaying = () => {
-                    canvas.width = 10; 
-                    canvas.height = 10;
+                    // Analyse sur une grille 8x8 pour une réactivité maximale
+                    canvas.width = 8; 
+                    canvas.height = 8;
                     render();
                 };
 
                 function render() {
+                    if (video.paused || video.ended) return;
+
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-                    // Analyse des zones spécifiques
-                    const topColor = getAreaColor(data, 0, 0, 10, 3);    // Bande haute
-                    const leftColor = getAreaColor(data, 0, 0, 3, 10);   // Bande gauche
-                    const rightColor = getAreaColor(data, 7, 0, 3, 10);  // Bande droite
+                    // Extraction rapide des couleurs moyennes par bordure
+                    const cTop = getAvg(data, [[2,0],[3,0],[4,0],[5,0]]);
+                    const cLeft = getAvg(data, [[0,2],[0,3],[0,4],[0,5]]);
+                    const cRight = getAvg(data, [[7,2],[7,3],[7,4],[7,5]]);
 
-                    // Application des couleurs avec un dégradé interne pour la douceur
-                    zones.top.style.background = `radial-gradient(ellipse at bottom, ${topColor}, transparent 80%)`;
-                    zones.left.style.background = `radial-gradient(ellipse at right, ${leftColor}, transparent 80%)`;
-                    zones.right.style.background = `radial-gradient(ellipse at left, ${rightColor}, transparent 80%)`;
+                    // Rendu rectangulaire via linear-gradients
+                    zones.top.style.background = `linear-gradient(to top, transparent, ${cTop})`;
+                    zones.left.style.background = `linear-gradient(to left, transparent, ${cLeft})`;
+                    zones.right.style.background = `linear-gradient(to right, transparent, ${cRight})`;
 
                     requestAnimationFrame(render);
                 }
 
-                function getAreaColor(data, xStart, yStart, width, height) {
-                    let r = 0, g = 0, b = 0, count = 0;
-                    
-                    for (let y = yStart; y < yStart + height; y++) {
-                        for (let x = xStart; x < xStart + width; x++) {
-                            const i = (y * 10 + x) * 4;
-                            r += data[i];
-                            g += data[i+1];
-                            b += data[i+2];
-                            count++;
-                        }
-                    }
-                    
-                    // On arrondit et on ajoute une opacité légère pour le côté "soft"
-                    return `rgba(${Math.floor(r/count)}, ${Math.floor(g/count)}, ${Math.floor(b/count)}, 0.7)`;
+                function getAvg(data, pixels) {
+                    let r = 0, g = 0, b = 0;
+                    pixels.forEach(([x, y]) => {
+                        const i = (y * 8 + x) * 4;
+                        r += data[i];
+                        g += data[i+1];
+                        b += data[i+2];
+                    });
+                    const l = pixels.length;
+                    // On booste un peu la saturation pour l'effet visuel (x1.1)
+                    return `rgba(${Math.min(255, (r/l)*1.1)}, ${Math.min(255, (g/l)*1.1)}, ${Math.min(255, (b/l)*1.1)}, 0.8)`;
                 }
 
             } catch (err) {
-                console.error("Erreur d'accès à l'écran:", err);
+                console.error("Erreur:", err);
             }
         };
     </script>
