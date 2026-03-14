@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Ambilight Ultra-Diffusion</title>
+    <title>Ambilight Full Surface Immersion</title>
     <style>
         body {
             background: #000;
@@ -12,7 +12,6 @@
             height: 100vh;
         }
 
-        /* Le conteneur ne doit pas rogner les débordements (pas d'overflow hidden ici) */
         #ambilight-wrapper {
             position: fixed;
             top: 0;
@@ -21,37 +20,29 @@
             height: 100%;
             pointer-events: none;
             z-index: -1;
-            /* Le flou est appliqué ici sur tout le groupe pour une fusion parfaite */
-            filter: blur(120px); 
+            /* Le secret : un flou colossal et un scale pour éviter les bords noirs du flou */
+            filter: blur(250px) saturate(1.5);
+            transform: scale(1.2); 
         }
 
         .glow-zone {
             position: absolute;
-            border-radius: 50%; /* Forme circulaire parfaite */
-            opacity: 0.7;
-            mix-blend-mode: screen;
             will-change: background;
+            opacity: 0.8;
+            mix-blend-mode: lighten;
         }
 
-        /* On place les centres HORS de l'écran pour que seule la "traine" lumineuse rentre */
-        #z-top {
-            top: -20%; left: 10%;
-            width: 80%; height: 40%;
-        }
-
-        #z-left {
-            top: 10%; left: -20%;
-            width: 40%; height: 80%;
-        }
-
-        #z-right {
-            top: 10%; right: -20%;
-            width: 40%; height: 80%;
-        }
-
-        #z-bottom {
-            bottom: -20%; left: 10%;
-            width: 80%; height: 40%;
+        /* Les zones sont maintenant géantes pour couvrir tout l'espace */
+        #z-top { top: -20%; left: 0; width: 100%; height: 60%; }
+        #z-bottom { bottom: -20%; left: 0; width: 100%; height: 60%; }
+        #z-left { top: 0; left: -20%; width: 60%; height: 100%; }
+        #z-right { top: 0; right: -20%; width: 60%; height: 100%; }
+        
+        /* Zone centrale de fusion pour l'homogénéité */
+        #z-center { 
+            top: 25%; left: 25%; width: 50%; height: 50%; 
+            border-radius: 50%; 
+            filter: blur(100px);
         }
 
         #ui-layer {
@@ -60,17 +51,17 @@
             transform: translate(-50%, -50%);
             text-align: center;
             z-index: 10;
-            color: white;
             font-family: sans-serif;
         }
 
         button {
-            padding: 15px 30px;
-            background: none;
-            border: 2px solid white;
+            padding: 20px 40px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid white;
             color: white;
             cursor: pointer;
-            font-weight: bold;
+            backdrop-filter: blur(10px);
+            letter-spacing: 2px;
         }
 
         canvas { display: none; }
@@ -79,7 +70,7 @@
 <body>
 
     <div id="ui-layer">
-        <button id="start-btn">ACTIVER L'IMMERSION TOTALE</button>
+        <button id="start-btn">LANCER L'IMMERSION TOTALE</button>
     </div>
 
     <div id="ambilight-wrapper">
@@ -87,6 +78,7 @@
         <div id="z-left" class="glow-zone"></div>
         <div id="z-right" class="glow-zone"></div>
         <div id="z-bottom" class="glow-zone"></div>
+        <div id="z-center" class="glow-zone"></div>
     </div>
 
     <canvas id="procCanvas"></canvas>
@@ -95,17 +87,13 @@
         const btn = document.getElementById("start-btn");
         const canvas = document.getElementById("procCanvas");
         const ctx = canvas.getContext("2d", { alpha: false });
+        
         const elements = {
             top: document.getElementById("z-top"),
             left: document.getElementById("z-left"),
             right: document.getElementById("z-right"),
-            bottom: document.getElementById("z-bottom")
-        };
-        const zones = {
-            top: { x: 1, y: 0 },
-            left: { x: 0, y: 1 },
-            right: { x: 2, y: 1 },
-            bottom: { x: 1, y: 2 }
+            bottom: document.getElementById("z-bottom"),
+            center: document.getElementById("z-center")
         };
 
         btn.onclick = async () => {
@@ -125,11 +113,18 @@
                     ctx.drawImage(video, 0, 0, 3, 3);
                     const data = ctx.getImageData(0, 0, 3, 3).data;
 
-                    for (let id in zones) {
-                        const i = (zones[id].y * 3 + zones[id].x) * 4;
-                        // On utilise directement la couleur pleine, le filter:blur(120px) fera le reste
-                        elements[id].style.backgroundColor = `rgb(${data[i]},${data[i+1]},${data[i+2]})`;
-                    }
+                    const getRGB = (x, y) => {
+                        const i = (y * 3 + x) * 4;
+                        return `rgb(${data[i]},${data[i+1]},${data[i+2]})`;
+                    };
+
+                    elements.top.style.backgroundColor = getRGB(1, 0);
+                    elements.left.style.backgroundColor = getRGB(0, 1);
+                    elements.right.style.backgroundColor = getRGB(2, 1);
+                    elements.bottom.style.backgroundColor = getRGB(1, 2);
+                    // Le centre est une moyenne des bords pour lier le tout
+                    elements.center.style.backgroundColor = getRGB(1, 1);
+
                     video.requestVideoFrameCallback(render);
                 };
                 video.requestVideoFrameCallback(render);
