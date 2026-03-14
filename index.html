@@ -2,45 +2,61 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Ambilight Pro - Ultra Équilibré</title>
+    <title>OBS Ambilight Pro - Force Symétrie</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; }
         
-        #ambilight-container {
+        /* Conteneur global */
+        #ambilight-root {
             position: absolute;
-            top: 10vh; left: 10vw;
-            width: 80vw; height: 80vh;
-            z-index: 1;
-            opacity: 0; 
-            transition: opacity 1s;
-            border-radius: 50%; /* Aide à la fusion circulaire */
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
         }
 
-        #ambilight-glow {
-            width: 100%; height: 100%;
-            filter: blur(100px); /* Flou massif pour la douceur */
+        /* Chaque face a sa propre div pour une indépendance totale */
+        .glow-zone {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px); /* Flou ultra large pour la douceur */
+            opacity: 0.7;
+            mix-blend-mode: screen; /* Mélange mieux les couleurs sur fond sombre */
         }
+
+        #glow-top { top: -10vh; width: 80vw; height: 20vh; }
+        #glow-left { left: -10vw; width: 20vw; height: 80vh; }
+        #glow-right { right: -10vw; width: 20vw; height: 80vh; }
 
         #start-btn {
             position: fixed;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            padding: 20px 40px;
-            background: #111; color: white;
-            border: 1px solid #444; cursor: pointer; z-index: 100;
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            padding: 20px; background: #222; color: #fff; z-index: 1000;
+        }
+
+        /* Debug : Affiche ce que le script voit (à supprimer après test) */
+        #debug-canvas {
+            position: fixed; bottom: 10px; left: 10px; 
+            border: 1px solid red; z-index: 1000; width: 200px;
         }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">ACTIVER AMBILIGHT ÉQUILIBRÉ</button>
-    <div id="ambilight-container"><div id="ambilight-glow"></div></div>
-    <canvas id="procCanvas" style="display:none;"></canvas>
+    <button id="start-btn">ACTIVER LE MODE SYMÉTRIQUE</button>
+    
+    <div id="ambilight-root">
+        <div id="glow-top" class="glow-zone"></div>
+        <div id="glow-left" class="glow-zone"></div>
+        <div id="glow-right" class="glow-zone"></div>
+    </div>
+
+    <canvas id="debug-canvas"></canvas>
 
     <script>
         const btn = document.getElementById('start-btn');
-        const glow = document.getElementById('ambilight-glow');
-        const canvas = document.getElementById('procCanvas');
+        const gTop = document.getElementById('glow-top');
+        const gLeft = document.getElementById('glow-left');
+        const gRight = document.getElementById('glow-right');
+        const canvas = document.getElementById('debug-canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         btn.onclick = async () => {
@@ -49,14 +65,11 @@
                 const video = document.createElement('video');
                 video.srcObject = stream;
                 video.play();
-
-                btn.style.display = 'none'; 
-                document.getElementById('ambilight-container').style.opacity = '1';
+                btn.style.display = 'none';
 
                 video.onplaying = () => {
-                    // Petite résolution pour moyenner naturellement les couleurs
-                    canvas.width = 20; 
-                    canvas.height = 12;
+                    canvas.width = 32;
+                    canvas.height = 18;
                     render();
                 };
 
@@ -64,40 +77,36 @@
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
                     
-                    // On analyse des zones (bandes) pour être sûr de capter la couleur
-                    const cTop    = getZoneAvg(pixels, 5, 15, 0, 3);   // Bande haute centrale
-                    const cLeft   = getZoneAvg(pixels, 0, 4, 3, 9);    // Bande gauche centrale
-                    const cRight  = getZoneAvg(pixels, 16, 20, 3, 9);  // Bande droite centrale
+                    // On prend des moyennes sur des zones larges
+                    const cTop = getAvg(pixels, 8, 24, 0, 4);    // Haut centre
+                    const cLeft = getAvg(pixels, 0, 6, 4, 14);   // Bord gauche
+                    const cRight = getAvg(pixels, 26, 32, 4, 14); // Bord droit
 
-                    glow.style.boxShadow = `
-                        /* HAUT */
-                        0px -15vh 400px 10vw ${cTop},
-                        /* GAUCHE */
-                        -20vw 0px 400px 10vh ${cLeft},
-                        /* DROITE */
-                        20vw 0px 400px 10vh ${cRight}
-                    `;
+                    // Application directe sur le background pour éviter les bugs de box-shadow
+                    gTop.style.background = cTop;
+                    gTop.style.boxShadow = `0 0 100px 50px ${cTop}`;
+                    
+                    gLeft.style.background = cLeft;
+                    gLeft.style.boxShadow = `0 0 100px 50px ${cLeft}`;
+                    
+                    gRight.style.background = cRight;
+                    gRight.style.boxShadow = `0 0 100px 50px ${cRight}`;
 
                     requestAnimationFrame(render);
                 }
 
-                // Fonction pour calculer la moyenne d'un rectangle de pixels
-                function getZoneAvg(data, xStart, xEnd, yStart, yEnd) {
+                function getAvg(data, xS, xE, yS, yE) {
                     let r = 0, g = 0, b = 0, count = 0;
-                    for (let y = yStart; y < yEnd; y++) {
-                        for (let x = xStart; x < xEnd; x++) {
+                    for (let y = yS; y < yE; y++) {
+                        for (let x = xS; x < xE; x++) {
                             const i = (y * canvas.width + x) * 4;
-                            r += data[i];
-                            g += data[i+1];
-                            b += data[i+2];
+                            r += data[i]; g += data[i+1]; b += data[i+2];
                             count++;
                         }
                     }
-                    // On booste un peu la saturation pour la douceur (0.7 d'opacité)
-                    return `rgba(${Math.round(r/count)}, ${Math.round(g/count)}, ${Math.round(b/count)}, 0.7)`;
+                    return `rgb(${Math.round(r/count)}, ${Math.round(g/count)}, ${Math.round(b/count)})`;
                 }
-
-            } catch (err) { console.error(err); }
+            } catch (e) { console.error(e); }
         };
     </script>
 </body>
