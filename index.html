@@ -2,31 +2,29 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Ambilight Cloud - Zero Latency</title>
+    <title>Ambilight - Liquid Motion</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; }
         
         #ambilight-wrapper {
             position: absolute;
-            top: -20vh; left: -20vw;
-            width: 140vw; height: 140vh;
+            top: -25vh; left: -25vw;
+            width: 150vw; height: 150vh;
             pointer-events: none;
-            /* Force l'accélération matérielle */
             transform: translateZ(0);
         }
 
         .glow-zone {
             position: absolute;
-            width: 70vw;
-            height: 70vh;
+            width: 80vw;
+            height: 80vh;
             mix-blend-mode: screen;
-            filter: blur(180px);
+            filter: blur(200px); /* Nuage encore plus diffus */
             opacity: 0.9;
-            transition: none !important; /* Suppression totale des délais */
+            transition: none !important; /* On gère la fluidité en JS, pas en CSS */
             will-change: background;
         }
 
-        /* Positions stratégiques pour la projection */
         #z-top    { top: 0; left: 35vw; }
         #z-left   { left: 0; top: 35vh; }
         #z-right  { right: 0; top: 35vh; }
@@ -35,13 +33,13 @@
         #start-btn {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             padding: 15px 30px; background: #000; color: #fff; border: 1px solid #fff;
-            cursor: pointer; z-index: 1000; font-family: sans-serif; text-transform: uppercase;
+            cursor: pointer; z-index: 1000; font-family: sans-serif;
         }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">Activer la synchro instantanée</button>
+    <button id="start-btn">ACTIVER LE FLUX LIQUIDE</button>
     <div id="ambilight-wrapper">
         <div id="z-top" class="glow-zone"></div>
         <div id="z-left" class="glow-zone"></div>
@@ -53,77 +51,69 @@
     <script>
         const btn = document.getElementById('start-btn');
         const canvas = document.getElementById('procCanvas');
-        // 'desynchronized' réduit la latence du buffer de rendu
-        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true, willReadFrequently: true });
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
         
+        // Structure pour stocker l'état actuel des couleurs (pour le lissage)
         const zones = {
-            'z-top':    { x: 1, y: 0 },
-            'z-left':   { x: 0, y: 1 },
-            'z-right':  { x: 2, y: 1 },
-            'z-bottom': { x: 1, y: 2 }
+            'z-top':    { x: 1, y: 0, current: [0,0,0], target: [0,0,0] },
+            'z-left':   { x: 0, y: 1, current: [0,0,0], target: [0,0,0] },
+            'z-right':  { x: 2, y: 1, current: [0,0,0], target: [0,0,0] },
+            'z-bottom': { x: 1, y: 2, current: [0,0,0], target: [0,0,0] }
         };
+
+        // FACTEUR DE LISSAGE : 0.1 = très fluide/lent, 0.8 = très réactif/nerveux
+        const SMOOTHING = 0.15; 
 
         btn.onclick = async () => {
             try {
                 const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { 
-                        width: 128, 
-                        height: 72,
-                        frameRate: { ideal: 60, max: 144 } // Support des hautes fréquences
-                    }
+                    video: { width: 128, height: 72, frameRate: 60 }
                 });
-                
                 const video = document.createElement('video');
                 video.srcObject = stream;
-                // Désactive tout traitement audio ou bufferisation
                 video.muted = true;
                 video.play();
                 btn.style.display = 'none';
 
                 video.onplaying = () => {
-                    // Grille 3x3 : le minimum vital pour la réactivité
-                    canvas.width = 3;
-                    canvas.height = 3;
-                    
-                    // Utilisation de la méthode la plus rapide supportée
-                    if ('requestVideoFrameCallback' in video) {
-                        video.requestVideoFrameCallback(processFrame);
-                    } else {
-                        renderFallback();
-                    }
+                    canvas.width = 3; canvas.height = 3;
+                    renderLoop();
                 };
 
-                function processFrame() {
-                    updateColors();
-                    video.requestVideoFrameCallback(processFrame);
-                }
-
-                function renderFallback() {
-                    updateColors();
-                    requestAnimationFrame(renderFallback);
-                }
-
-                function updateColors() {
+                function renderLoop() {
                     if (video.paused || video.ended) return;
 
+                    // 1. Capture de la cible
                     ctx.drawImage(video, 0, 0, 3, 3);
                     const data = ctx.getImageData(0, 0, 3, 3).data;
 
                     for (let id in zones) {
-                        const pos = zones[id];
-                        const i = (pos.y * 3 + pos.x) * 4;
+                        const z = zones[id];
+                        const i = (z.y * 3 + z.x) * 4;
                         
-                        let r = data[i], g = data[i+1], b = data[i+2];
+                        // 2. Calcul de la cible (avec boost de couleur)
+                        const avg = (data[i] + data[i+1] + data[i+2]) / 3;
+                        z.target = [
+                            data[i] + (data[i] - avg) * 0.8,
+                            data[i+1] + (data[i+1] - avg) * 0.8,
+                            data[i+2] + (data[i+2] - avg) * 0.8
+                        ];
 
-                        // Boost de vibrance sans perte de performance
-                        const avg = (r + g + b) / 3;
-                        r = Math.min(255, r + (r - avg) * 0.8);
-                        g = Math.min(255, g + (g - avg) * 0.8);
-                        b = Math.min(255, b + (b - avg) * 0.8);
+                        // 3. INTERPOLATION LINÉAIRE (Le secret de la fluidité)
+                        // current = current + (target - current) * smoothing
+                        z.current[0] += (z.target[0] - z.current[0]) * SMOOTHING;
+                        z.current[1] += (z.target[1] - z.current[1]) * SMOOTHING;
+                        z.current[2] += (z.target[2] - z.current[2]) * SMOOTHING;
 
+                        // 4. Mise à jour visuelle
+                        const r = Math.round(z.current[0]);
+                        const g = Math.round(z.current[1]);
+                        const b = Math.round(z.current[2]);
+                        
                         document.getElementById(id).style.background = 
                             `radial-gradient(circle, rgb(${r},${g},${b}) 0%, transparent 85%)`;
                     }
+                    requestAnimationFrame(renderLoop);
                 }
             } catch (err) { console.error(err); }
         };
