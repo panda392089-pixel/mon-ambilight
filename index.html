@@ -2,77 +2,66 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Ambilight Organique</title>
+    <title>OBS Ambilight Pro - Ultra Soft</title>
     <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background: transparent;
-            font-family: sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
-
-        /* Le canvas qui affichera la lueur */
-        #ambilight-screen {
+        body { margin: 0; overflow: hidden; background: transparent; font-family: sans-serif; }
+        
+        #ambilight-container {
             position: absolute;
-            width: 130vw; /* Beaucoup plus large que l'écran pour une diffusion totale */
-            height: 130vh; /* Beaucoup plus haut */
+            top: 15vh;
+            left: 15vw;
+            width: 70vw;
+            height: 70vh;
             z-index: 1;
-            
-            /* --- SECRET DE LA DIFFUSION ORGANIQUE --- */
-            /* Le flou floute les pixels étirés, fusionnant les couleurs */
-            filter: blur(80px); /* Ajuste la douceur ici (50px à 120px) */
-            
-            opacity: 0;
-            transition: opacity 1.5s;
-            object-fit: fill; /* Étire l'image pour remplir tout le canvas */
+            opacity: 0; 
+            transition: opacity 1.5s ease-in-out;
+            /* L'astuce : un arrondi total pour fusionner les ombres au centre */
+            border-radius: 50%; 
         }
 
-        /* Bouton d'activation OBS (Interagir) */
+        #ambilight-glow {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            /* Filtre de lissage supplémentaire */
+            filter: blur(50px);
+        }
+
         #start-btn {
             position: fixed;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             padding: 25px 40px;
-            font-size: 1.3em;
+            font-size: 1.2em;
             background: #111;
-            color: #ccc;
+            color: #fff;
             border: 1px solid #333; cursor: pointer; border-radius: 8px;
             z-index: 100;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.7);
+            box-shadow: 0 10px 30px rgba(0,0,0,1);
         }
-        #start-btn:hover { background: #222; color: white; }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">ACTIVER AMBILIGHT</button>
+    <button id="start-btn">ACTIVER L'EFFET IMMERSIF<br><small>(Clic droit > Interagir dans OBS)</small></button>
     
-    <canvas id="ambilight-screen"></canvas>
+    <div id="ambilight-container">
+        <div id="ambilight-glow"></div>
+    </div>
     
     <canvas id="procCanvas" style="display:none;"></canvas>
 
     <script>
         const btn = document.getElementById('start-btn');
-        const ambilightCanvas = document.getElementById('ambilight-screen');
-        const procCanvas = document.getElementById('procCanvas');
-        
-        const ambilightCtx = ambilightCanvas.getContext('2d');
-        const procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
-
-        // Résolution d'analyse (basse pour la performance et une fusion douce)
-        const ANALYSIS_WIDTH = 32;
-        const ANALYSIS_HEIGHT = 18;
+        const container = document.getElementById('ambilight-container');
+        const glow = document.getElementById('ambilight-glow');
+        const canvas = document.getElementById('procCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         btn.onclick = async () => {
             try {
-                // Demander la source vidéo (Fenêtre de jeu ou Écran)
-                // On capture en résolution modérée pour économiser des ressources
                 const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+                    video: { width: 1280, height: 720 }, // Résolution réduite pour fluidité
                     audio: false
                 });
 
@@ -81,45 +70,55 @@
                 video.play();
 
                 btn.style.display = 'none'; 
+                container.style.opacity = '1';
 
                 video.onplaying = () => {
-                    // Initialiser les tailles des canvas
-                    procCanvas.width = ANALYSIS_WIDTH;
-                    procCanvas.height = ANALYSIS_HEIGHT;
-                    
-                    // Le canvas visible doit correspondre à la taille de la source OBS
-                    ambilightCanvas.width = window.innerWidth;
-                    ambilightCanvas.height = window.innerHeight;
-                    
-                    ambilightCanvas.style.opacity = '1';
-                    
+                    canvas.width = 16; // Basse résolution = mélange de couleurs naturel
+                    canvas.height = 9;
                     render();
                 };
 
                 function render() {
-                    if (video.paused || video.ended) return;
-
-                    // 1. Dessiner le flux vidéo complet sur le petit canvas d'analyse
-                    procCtx.drawImage(video, 0, 0, ANALYSIS_WIDTH, ANALYSIS_HEIGHT);
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
                     
-                    // 2. Dessiner le petit canvas d'analyse sur le grand canvas visible
-                    // L'étirement (fill) et le flou CSS vont créer l'effet organique
-                    ambilightCtx.clearRect(0, 0, ambilightCanvas.width, ambilightCanvas.height);
-                    ambilightCtx.drawImage(procCanvas, 0, 0, ambilightCanvas.width, ambilightCanvas.height);
+                    // On échantillonne des zones plutôt que des pixels uniques
+                    const cTopLeft = getAvgRGB(data, 2, 2);
+                    const cTopRight = getAvgRGB(data, 13, 2);
+                    const cBottomLeft = getAvgRGB(data, 2, 7);
+                    const cBottomRight = getAvgRGB(data, 13, 7);
+
+                    // Calcul de la couleur moyenne centrale pour "lier" le tout
+                    const cCenter = getAvgRGB(data, 8, 4);
+
+                    glow.style.boxShadow = `
+                        /* COUCHE DE COEUR (Lien central) */
+                        0 0 300px 100px ${cCenter},
+                        
+                        /* COUCHE ATMOSPHÉRIQUE (Très diffuse) */
+                        -20vw -15vh 450px 50px ${cTopLeft}, 
+                        20vw -15vh 450px 50px ${cTopRight},
+                        -20vw 15vh 450px 50px ${cBottomLeft},
+                        20vw 15vh 450px 50px ${cBottomRight},
+
+                        /* COUCHE DE BORDURE (Plus colorée) */
+                        -10vw -10vh 150px 0px ${cTopLeft}, 
+                        10vw -10vh 150px 0px ${cTopRight},
+                        -10vw 10vh 150px 0px ${cBottomLeft},
+                        10vw 10vh 150px 0px ${cBottomRight}
+                    `;
 
                     requestAnimationFrame(render);
                 }
 
-                // Gérer le redimensionnement de la source OBS
-                window.onresize = () => {
-                    ambilightCanvas.width = window.innerWidth;
-                    ambilightCanvas.height = window.innerHeight;
-                };
+                function getAvgRGB(data, x, y) {
+                    const i = (y * canvas.width + x) * 4;
+                    // Boost de saturation léger (1.2) pour compenser le flou
+                    return `rgba(${data[i]}, ${data[i+1]}, ${data[i+2]}, 0.8)`;
+                }
 
             } catch (err) {
-                console.error("Erreur de capture : " + err);
-                btn.textContent = "Erreur. Réessaye.";
-                btn.style.display = 'block';
+                console.error(err);
             }
         };
     </script>
