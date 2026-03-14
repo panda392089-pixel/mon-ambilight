@@ -2,111 +2,110 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Ambilight Pro - Force Symétrie</title>
+    <title>OBS Ambilight Pro - Correction Latérale</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; }
         
-        /* Conteneur global */
         #ambilight-root {
             position: absolute;
             top: 0; left: 0; width: 100vw; height: 100vh;
-            display: flex; justify-content: center; align-items: center;
+            pointer-events: none;
         }
 
-        /* Chaque face a sa propre div pour une indépendance totale */
-        .glow-zone {
+        .light-source {
             position: absolute;
+            width: 60vw; height: 60vh;
             border-radius: 50%;
-            filter: blur(120px); /* Flou ultra large pour la douceur */
-            opacity: 0.7;
-            mix-blend-mode: screen; /* Mélange mieux les couleurs sur fond sombre */
+            filter: blur(100px);
+            opacity: 0.6;
+            mix-blend-mode: screen;
+            transition: background 0.2s ease;
         }
 
-        #glow-top { top: -10vh; width: 80vw; height: 20vh; }
-        #glow-left { left: -10vw; width: 20vw; height: 80vh; }
-        #glow-right { right: -10vw; width: 20vw; height: 80vh; }
+        /* Placement forcé aux trois bords */
+        #top-light   { top: -25vh; left: 20vw; }
+        #left-light  { top: 20vh;  left: -25vw; }
+        #right-light { top: 20vh;  right: -25vw; }
 
         #start-btn {
-            position: fixed;
-            top: 50%; left: 50%; transform: translate(-50%, -50%);
-            padding: 20px; background: #222; color: #fff; z-index: 1000;
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            padding: 20px; background: #222; color: #fff; cursor: pointer; z-index: 1000;
         }
 
-        /* Debug : Affiche ce que le script voit (à supprimer après test) */
-        #debug-canvas {
-            position: fixed; bottom: 10px; left: 10px; 
-            border: 1px solid red; z-index: 1000; width: 200px;
+        #monitor {
+            position: fixed; bottom: 10px; right: 10px; 
+            width: 160px; height: 90px; border: 2px solid white; z-index: 1000;
         }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">ACTIVER LE MODE SYMÉTRIQUE</button>
-    
-    <div id="ambilight-root">
-        <div id="glow-top" class="glow-zone"></div>
-        <div id="glow-left" class="glow-zone"></div>
-        <div id="glow-right" class="glow-zone"></div>
-    </div>
+    <button id="start-btn">LANCER LE SCANNER TOTAL</button>
+    <canvas id="monitor"></canvas>
 
-    <canvas id="debug-canvas"></canvas>
+    <div id="ambilight-root">
+        <div id="top-light" class="light-source"></div>
+        <div id="left-light" class="light-source"></div>
+        <div id="right-light" class="light-source"></div>
+    </div>
 
     <script>
         const btn = document.getElementById('start-btn');
-        const gTop = document.getElementById('glow-top');
-        const gLeft = document.getElementById('glow-left');
-        const gRight = document.getElementById('glow-right');
-        const canvas = document.getElementById('debug-canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const canvas = document.getElementById('monitor');
+        const ctx = canvas.getContext('2d', { alpha: false });
 
         btn.onclick = async () => {
             try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const stream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: { cursor: "never" }, 
+                    audio: false 
+                });
                 const video = document.createElement('video');
                 video.srcObject = stream;
                 video.play();
                 btn.style.display = 'none';
 
                 video.onplaying = () => {
-                    canvas.width = 32;
-                    canvas.height = 18;
+                    // On force une résolution de lecture pour le script
                     render();
                 };
 
                 function render() {
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-                    
-                    // On prend des moyennes sur des zones larges
-                    const cTop = getAvg(pixels, 8, 24, 0, 4);    // Haut centre
-                    const cLeft = getAvg(pixels, 0, 6, 4, 14);   // Bord gauche
-                    const cRight = getAvg(pixels, 26, 32, 4, 14); // Bord droit
+                    // ÉTAPE CRUCIALE : On dessine la vidéo en ignorant les 10% des bords 
+                    // pour éviter de capturer des bandes noires ou des cadres de fenêtre
+                    ctx.drawImage(video, 
+                        video.videoWidth * 0.1, video.videoHeight * 0.1, // Début du crop (10%)
+                        video.videoWidth * 0.8, video.videoHeight * 0.8, // Taille du crop (80%)
+                        0, 0, canvas.width, canvas.height // Redimensionnement sur le canvas
+                    );
 
-                    // Application directe sur le background pour éviter les bugs de box-shadow
-                    gTop.style.background = cTop;
-                    gTop.style.boxShadow = `0 0 100px 50px ${cTop}`;
-                    
-                    gLeft.style.background = cLeft;
-                    gLeft.style.boxShadow = `0 0 100px 50px ${cLeft}`;
-                    
-                    gRight.style.background = cRight;
-                    gRight.style.boxShadow = `0 0 100px 50px ${cRight}`;
+                    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                    const w = canvas.width;
+                    const h = canvas.height;
+
+                    // Analyse par zones larges (Moyenne R,G,B)
+                    const cTop   = getAvg(pixels, w, 0, w, 0, Math.floor(h/3));
+                    const cLeft  = getAvg(pixels, w, 0, Math.floor(w/3), 0, h);
+                    const cRight = getAvg(pixels, w, Math.floor(w*0.7), w, 0, h);
+
+                    document.getElementById('top-light').style.background = cTop;
+                    document.getElementById('left-light').style.background = cLeft;
+                    document.getElementById('right-light').style.background = cRight;
 
                     requestAnimationFrame(render);
                 }
 
-                function getAvg(data, xS, xE, yS, yE) {
-                    let r = 0, g = 0, b = 0, count = 0;
+                function getAvg(p, w, xS, xE, yS, yE) {
+                    let r = 0, g = 0, b = 0, c = 0;
                     for (let y = yS; y < yE; y++) {
                         for (let x = xS; x < xE; x++) {
-                            const i = (y * canvas.width + x) * 4;
-                            r += data[i]; g += data[i+1]; b += data[i+2];
-                            count++;
+                            let i = (y * w + x) * 4;
+                            r += p[i]; g += p[i+1]; b += p[i+2]; c++;
                         }
                     }
-                    return `rgb(${Math.round(r/count)}, ${Math.round(g/count)}, ${Math.round(b/count)})`;
+                    return `rgb(${Math.round(r/c)},${Math.round(g/c)},${Math.round(b/c)})`;
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) { alert("Erreur : " + e); }
         };
     </script>
 </body>
