@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ambilight Gaming Pro</title>
+<title>Ambilight Circular Ultra Reactive</title>
 
 <style>
 
@@ -19,8 +19,6 @@ overflow:hidden;
 height:100vh;
 width:100vw;
 }
-
-/* conteneur lumière */
 
 #ambilight-wrapper{
 position:fixed;
@@ -44,37 +42,37 @@ will-change:background;
 /* projection plafond */
 
 #z-top{
-top:-25vh;
-left:-15vw;
-width:130vw;
-height:70vh;
+top:-35vh;
+left:-20vw;
+width:140vw;
+height:90vh;
 }
 
 /* projection gauche */
 
 #z-left{
-top:-10vh;
-left:-25vw;
-width:70vw;
-height:120vh;
+top:-15vh;
+left:-35vw;
+width:90vw;
+height:130vh;
 }
 
 /* projection droite */
 
 #z-right{
-top:-10vh;
-right:-25vw;
-width:70vw;
-height:120vh;
+top:-15vh;
+right:-35vw;
+width:90vw;
+height:130vh;
 }
 
 /* projection bas */
 
 #z-bottom{
-bottom:-25vh;
-left:-15vw;
-width:130vw;
-height:70vh;
+bottom:-35vh;
+left:-20vw;
+width:140vw;
+height:90vh;
 }
 
 /* interface */
@@ -132,11 +130,11 @@ Sélectionnez votre écran de jeu
 
 <script>
 
-const btn = document.getElementById("start-btn")
+const btn=document.getElementById("start-btn")
 
-const canvas = document.getElementById("procCanvas")
+const canvas=document.getElementById("procCanvas")
 
-const ctx = canvas.getContext("2d",{
+const ctx=canvas.getContext("2d",{
 alpha:false,
 desynchronized:true,
 willReadFrequently:true
@@ -160,13 +158,13 @@ right:{x:2,y:1},
 bottom:{x:1,y:2}
 }
 
-const SATURATION_BOOST = 1.6
+const SATURATION_BOOST=1.6
 
-btn.onclick = async()=>{
+btn.onclick=async()=>{
 
 try{
 
-const stream = await navigator.mediaDevices.getDisplayMedia({
+const stream=await navigator.mediaDevices.getDisplayMedia({
 
 video:{
 width:{ideal:64},
@@ -178,50 +176,57 @@ audio:false
 
 })
 
-const video = document.createElement("video")
+const video=document.createElement("video")
 
-video.srcObject = stream
-video.muted = true
+video.srcObject=stream
+video.muted=true
 
 await video.play()
 
 document.getElementById("ui-layer").style.display="none"
 
-canvas.width = 3
-canvas.height = 3
+canvas.width=3
+canvas.height=3
 
 video.requestVideoFrameCallback(renderLoop)
 
 function renderLoop(){
 
-if(video.paused || video.ended) return
+if(video.paused||video.ended) return
 
 ctx.drawImage(video,0,0,3,3)
 
-const data = ctx.getImageData(0,0,3,3).data
+const data=ctx.getImageData(0,0,3,3).data
 
 for(let id in zones){
 
-const z = zones[id]
+const z=zones[id]
 
-const i = (z.y*3+z.x)*4
+const i=(z.y*3+z.x)*4
 
 let r=data[i]
 let g=data[i+1]
 let b=data[i+2]
 
-const gray = 0.2989*r + 0.587*g + 0.114*b
+const gray=0.2989*r+0.587*g+0.114*b
 
-r = Math.max(0,Math.min(255,gray+(r-gray)*SATURATION_BOOST))
-g = Math.max(0,Math.min(255,gray+(g-gray)*SATURATION_BOOST))
-b = Math.max(0,Math.min(255,gray+(b-gray)*SATURATION_BOOST))
+r=Math.max(0,Math.min(255,gray+(r-gray)*SATURATION_BOOST))
+g=Math.max(0,Math.min(255,gray+(g-gray)*SATURATION_BOOST))
+b=Math.max(0,Math.min(255,gray+(b-gray)*SATURATION_BOOST))
 
-const el = elements[id]
+const el=elements[id]
 
-/* halo circulaire doux */
+/* halo circulaire orienté vers l'écran */
 
-el.style.background = `radial-gradient(
-circle at center,
+let gradientPosition="center"
+
+if(id==="top") gradientPosition="50% 100%"
+if(id==="bottom") gradientPosition="50% 0%"
+if(id==="left") gradientPosition="100% 50%"
+if(id==="right") gradientPosition="0% 50%"
+
+el.style.background=`radial-gradient(
+circle at ${gradientPosition},
 rgba(${r},${g},${b},0.95) 0%,
 rgba(${r},${g},${b},0.65) 20%,
 rgba(${r},${g},${b},0.40) 40%,
