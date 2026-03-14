@@ -3,11 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ambilight Gaming 8 Zones</title>
+<title>Ambilight Gaming Pro</title>
 
 <style>
 
-*{margin:0;padding:0;box-sizing:border-box;}
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+}
 
 body{
 background:#000;
@@ -15,6 +19,8 @@ overflow:hidden;
 height:100vh;
 width:100vw;
 }
+
+/* conteneur lumière */
 
 #ambilight-wrapper{
 position:fixed;
@@ -26,82 +32,54 @@ pointer-events:none;
 z-index:-1;
 }
 
-.glow{
+/* halos lumineux */
+
+.glow-zone{
 position:absolute;
 opacity:0.95;
 mix-blend-mode:screen;
 will-change:background;
 }
 
-/* haut */
+/* projection plafond */
 
-#top{
-top:-35vh;
-left:-20vw;
-width:140vw;
-height:80vh;
+#z-top{
+top:-25vh;
+left:-15vw;
+width:130vw;
+height:70vh;
 }
 
-/* bas */
+/* projection gauche */
 
-#bottom{
-bottom:-35vh;
-left:-20vw;
-width:140vw;
-height:80vh;
-}
-
-/* gauche */
-
-#left{
-left:-35vw;
+#z-left{
 top:-10vh;
-width:80vw;
+left:-25vw;
+width:70vw;
 height:120vh;
 }
 
-/* droite */
+/* projection droite */
 
-#right{
-right:-35vw;
+#z-right{
 top:-10vh;
-width:80vw;
+right:-25vw;
+width:70vw;
 height:120vh;
 }
 
-/* coins */
+/* projection bas */
 
-#top-left{
-top:-30vh;
-left:-30vw;
-width:80vw;
-height:80vh;
+#z-bottom{
+bottom:-25vh;
+left:-15vw;
+width:130vw;
+height:70vh;
 }
 
-#top-right{
-top:-30vh;
-right:-30vw;
-width:80vw;
-height:80vh;
-}
+/* interface */
 
-#bottom-left{
-bottom:-30vh;
-left:-30vw;
-width:80vw;
-height:80vh;
-}
-
-#bottom-right{
-bottom:-30vh;
-right:-30vw;
-width:80vw;
-height:80vh;
-}
-
-/* UI */
-
-#ui{
+#ui-layer{
 position:fixed;
 top:50%;
 left:50%;
@@ -111,13 +89,13 @@ z-index:10;
 }
 
 button{
-padding:18px 40px;
+padding:20px 40px;
 font-size:18px;
+font-weight:bold;
 background:transparent;
 border:2px solid white;
 color:white;
 cursor:pointer;
-font-weight:bold;
 }
 
 button:hover{
@@ -125,75 +103,70 @@ background:white;
 color:black;
 }
 
-canvas{display:none;}
+canvas{
+display:none;
+}
 
 </style>
 </head>
 
 <body>
 
-<div id="ui">
-<button id="start">DÉMARRER AMBILIGHT</button>
-<p style="color:#888;margin-top:15px;font-family:sans-serif">
-Sélectionnez votre écran
+<div id="ui-layer">
+<button id="start-btn">DÉMARRER AMBILIGHT</button>
+<p style="color:#888;margin-top:15px;font-family:sans-serif;">
+Sélectionnez votre écran de jeu
 </p>
 </div>
 
 <div id="ambilight-wrapper">
 
-<div id="top" class="glow"></div>
-<div id="bottom" class="glow"></div>
-<div id="left" class="glow"></div>
-<div id="right" class="glow"></div>
-
-<div id="top-left" class="glow"></div>
-<div id="top-right" class="glow"></div>
-<div id="bottom-left" class="glow"></div>
-<div id="bottom-right" class="glow"></div>
+<div id="z-top" class="glow-zone"></div>
+<div id="z-left" class="glow-zone"></div>
+<div id="z-right" class="glow-zone"></div>
+<div id="z-bottom" class="glow-zone"></div>
 
 </div>
 
-<canvas id="c"></canvas>
+<canvas id="procCanvas"></canvas>
 
 <script>
 
-const btn=document.getElementById("start")
+const btn = document.getElementById("start-btn")
 
-const canvas=document.getElementById("c")
+const canvas = document.getElementById("procCanvas")
 
-const ctx=canvas.getContext("2d",{
+const ctx = canvas.getContext("2d",{
 alpha:false,
 desynchronized:true,
 willReadFrequently:true
 })
 
-const el={
-top:document.getElementById("top"),
-bottom:document.getElementById("bottom"),
-left:document.getElementById("left"),
-right:document.getElementById("right"),
-tl:document.getElementById("top-left"),
-tr:document.getElementById("top-right"),
-bl:document.getElementById("bottom-left"),
-br:document.getElementById("bottom-right")
+/* cache DOM */
+
+const elements={
+top:document.getElementById("z-top"),
+left:document.getElementById("z-left"),
+right:document.getElementById("z-right"),
+bottom:document.getElementById("z-bottom")
 }
+
+/* mapping pixels */
 
 const zones={
-tl:{x:0,y:0},
 top:{x:1,y:0},
-tr:{x:2,y:0},
 left:{x:0,y:1},
 right:{x:2,y:1},
-bl:{x:0,y:2},
-bottom:{x:1,y:2},
-br:{x:2,y:2}
+bottom:{x:1,y:2}
 }
 
-const SAT=1.6
+const SATURATION_BOOST = 1.6
 
-btn.onclick=async()=>{
+btn.onclick = async()=>{
 
-const stream=await navigator.mediaDevices.getDisplayMedia({
+try{
+
+const stream = await navigator.mediaDevices.getDisplayMedia({
 
 video:{
 width:{ideal:64},
@@ -205,51 +178,67 @@ audio:false
 
 })
 
-const video=document.createElement("video")
-video.srcObject=stream
-video.muted=true
+const video = document.createElement("video")
+
+video.srcObject = stream
+video.muted = true
 
 await video.play()
 
-document.getElementById("ui").style.display="none"
+document.getElementById("ui-layer").style.display="none"
 
-canvas.width=3
-canvas.height=3
+canvas.width = 3
+canvas.height = 3
 
-video.requestVideoFrameCallback(loop)
+video.requestVideoFrameCallback(renderLoop)
 
-function loop(){
+function renderLoop(){
+
+if(video.paused || video.ended) return
 
 ctx.drawImage(video,0,0,3,3)
 
-const data=ctx.getImageData(0,0,3,3).data
+const data = ctx.getImageData(0,0,3,3).data
 
-for(let k in zones){
+for(let id in zones){
 
-const z=zones[k]
+const z = zones[id]
 
-const i=(z.y*3+z.x)*4
+const i = (z.y*3+z.x)*4
 
 let r=data[i]
 let g=data[i+1]
 let b=data[i+2]
 
-const gray=0.2989*r+0.587*g+0.114*b
+const gray = 0.2989*r + 0.587*g + 0.114*b
 
-r=gray+(r-gray)*SAT
-g=gray+(g-gray)*SAT
-b=gray+(b-gray)*SAT
+r = Math.max(0,Math.min(255,gray+(r-gray)*SATURATION_BOOST))
+g = Math.max(0,Math.min(255,gray+(g-gray)*SATURATION_BOOST))
+b = Math.max(0,Math.min(255,gray+(b-gray)*SATURATION_BOOST))
 
-el[k].style.background=`radial-gradient(circle,
+const el = elements[id]
+
+/* halo circulaire doux */
+
+el.style.background = `radial-gradient(
+circle at center,
 rgba(${r},${g},${b},0.95) 0%,
-rgba(${r},${g},${b},0.6) 30%,
-rgba(${r},${g},${b},0.25) 55%,
-rgba(${r},${g},${b},0.08) 70%,
-rgba(${r},${g},${b},0) 100%)`
+rgba(${r},${g},${b},0.65) 20%,
+rgba(${r},${g},${b},0.40) 40%,
+rgba(${r},${g},${b},0.20) 60%,
+rgba(${r},${g},${b},0.05) 75%,
+rgba(${r},${g},${b},0) 100%
+)`
 
 }
 
-video.requestVideoFrameCallback(loop)
+video.requestVideoFrameCallback(renderLoop)
+
+}
+
+}catch(err){
+
+console.error("Erreur capture :",err)
 
 }
 
