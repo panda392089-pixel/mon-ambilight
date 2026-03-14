@@ -2,113 +2,145 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Ambilight Frame</title>
+<title>Ambilight Screen Glow</title>
 
 <style>
-body{
-    margin:0;
-    background:#000;
-    overflow:hidden;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
+
+html,body{
+margin:0;
+background:black;
+overflow:hidden;
 }
 
-/* cadre */
-#frame{
-    position:relative;
-    width:90vw;
-    height:90vh;
-    border-top:20px solid red;
-    border-left:20px solid red;
-    border-right:20px solid red;
-    box-shadow:
-        0 -40px 120px red,
-        -40px 0 120px red,
-        40px 0 120px red;
+#canvas{
+position:fixed;
+top:0;
+left:0;
+width:100vw;
+height:100vh;
+pointer-events:none;
 }
 
-/* canvas caché pour analyser l'image */
-#capture{
-    display:none;
+video{
+display:none;
 }
+
+#start{
+position:fixed;
+top:20px;
+left:20px;
+z-index:10;
+padding:10px 20px;
+font-size:16px;
+background:#111;
+color:white;
+border:1px solid #444;
+cursor:pointer;
+}
+
 </style>
 </head>
-
 <body>
 
-<div id="frame"></div>
-<canvas id="capture"></canvas>
+<button id="start">Activer Ambilight</button>
+
+<video id="video" autoplay></video>
+<canvas id="canvas"></canvas>
 
 <script>
 
-const frame = document.getElementById("frame");
-const canvas = document.getElementById("capture");
-const ctx = canvas.getContext("2d");
+const video = document.getElementById("video")
+const canvas = document.getElementById("canvas")
+const ctx = canvas.getContext("2d")
+
+canvas.width = window.innerWidth
+canvas.height = window.innerHeight
 
 async function startCapture(){
 
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-        video:true
-    });
+const stream = await navigator.mediaDevices.getDisplayMedia({
+video:true
+})
 
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    await video.play();
+video.srcObject = stream
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+requestAnimationFrame(draw)
 
-    function update(){
-
-        ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
-        const edge = 40;
-
-        const top = ctx.getImageData(0,0,canvas.width,edge);
-        const left = ctx.getImageData(0,0,edge,canvas.height);
-        const right = ctx.getImageData(canvas.width-edge,0,edge,canvas.height);
-
-        function averageColor(data){
-
-            let r=0,g=0,b=0,count=0;
-
-            for(let i=0;i<data.data.length;i+=4){
-
-                r+=data.data[i];
-                g+=data.data[i+1];
-                b+=data.data[i+2];
-                count++;
-            }
-
-            r=Math.floor(r/count);
-            g=Math.floor(g/count);
-            b=Math.floor(b/count);
-
-            return `rgb(${r},${g},${b})`;
-        }
-
-        const topColor = averageColor(top);
-        const leftColor = averageColor(left);
-        const rightColor = averageColor(right);
-
-        frame.style.borderTopColor = topColor;
-        frame.style.borderLeftColor = leftColor;
-        frame.style.borderRightColor = rightColor;
-
-        frame.style.boxShadow =
-            `0 -40px 120px ${topColor},
-             -40px 0 120px ${leftColor},
-             40px 0 120px ${rightColor}`;
-
-        requestAnimationFrame(update);
-    }
-
-    update();
 }
 
-startCapture();
+document.getElementById("start").onclick = startCapture
+
+function getAverageColor(data){
+
+let r=0,g=0,b=0
+let count=0
+
+for(let i=0;i<data.length;i+=40){
+
+r+=data[i]
+g+=data[i+1]
+b+=data[i+2]
+
+count++
+
+}
+
+return {
+r:r/count,
+g:g/count,
+b:b/count
+}
+
+}
+
+function drawGlow(color,x,y,w,h){
+
+let gradient = ctx.createRadialGradient(
+x+w/2,y+h/2,0,
+x+w/2,y+h/2,300
+)
+
+gradient.addColorStop(0,`rgba(${color.r},${color.g},${color.b},0.7)`)
+gradient.addColorStop(1,"rgba(0,0,0,0)")
+
+ctx.fillStyle = gradient
+ctx.fillRect(x,y,w,h)
+
+}
+
+function draw(){
+
+if(video.readyState>=2){
+
+let tempCanvas=document.createElement("canvas")
+let tempCtx=tempCanvas.getContext("2d")
+
+tempCanvas.width=video.videoWidth
+tempCanvas.height=video.videoHeight
+
+tempCtx.drawImage(video,0,0)
+
+let edgeSize=80
+
+let top = tempCtx.getImageData(0,0,tempCanvas.width,edgeSize)
+let left = tempCtx.getImageData(0,0,edgeSize,tempCanvas.height)
+let right = tempCtx.getImageData(tempCanvas.width-edgeSize,0,edgeSize,tempCanvas.height)
+
+let topColor=getAverageColor(top.data)
+let leftColor=getAverageColor(left.data)
+let rightColor=getAverageColor(right.data)
+
+ctx.clearRect(0,0,canvas.width,canvas.height)
+
+drawGlow(topColor,0,0,canvas.width,200)
+drawGlow(leftColor,0,0,200,canvas.height)
+drawGlow(rightColor,canvas.width-200,0,200,canvas.height)
+
+}
+
+requestAnimationFrame(draw)
+
+}
 
 </script>
 
