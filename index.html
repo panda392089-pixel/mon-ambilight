@@ -1,212 +1,168 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<title>Realistic Ambilight</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ambilight Simulator</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: black;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: sans-serif;
+        }
 
-<style>
+        /* Le conteneur principal qui contient le "vide" au centre */
+        #ambilight-container {
+            position: relative;
+            width: 90vw;
+            height: 85vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
 
-html,body{
-margin:0;
-background:black;
-overflow:hidden;
-}
+        /* Les halos lumineux (Gauche, Haut, Droite) */
+        .glow {
+            position: absolute;
+            filter: blur(80px); /* Flou très large pour l'aspect réaliste */
+            opacity: 0.8;
+            transition: background 0.2s ease;
+            pointer-events: none;
+        }
 
-canvas{
-position:fixed;
-top:0;
-left:0;
-width:100vw;
-height:100vh;
-pointer-events:none;
-}
+        #glow-top {
+            top: -50px;
+            left: 0;
+            right: 0;
+            height: 150px;
+            border-radius: 50% 50% 0 0;
+        }
 
-video{
-display:none;
-}
+        #glow-left {
+            top: 0;
+            bottom: 0;
+            left: -50px;
+            width: 150px;
+            border-radius: 50% 0 0 50%;
+        }
 
-#start{
-position:fixed;
-top:20px;
-left:20px;
-z-index:10;
-padding:12px 20px;
-font-size:15px;
-background:#111;
-color:white;
-border:1px solid #333;
-cursor:pointer;
-}
+        #glow-right {
+            top: 0;
+            bottom: 0;
+            right: -50px;
+            width: 150px;
+            border-radius: 0 50% 50% 0;
+        }
 
-</style>
+        /* Interface de contrôle */
+        #controls {
+            position: absolute;
+            z-index: 100;
+            color: white;
+            text-align: center;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 1rem;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        video, canvas {
+            display: none; /* On cache la source vidéo brute */
+        }
+    </style>
 </head>
 <body>
 
-<button id="start">Activer Ambilight</button>
-
-<video id="video" autoplay></video>
-<canvas id="canvas"></canvas>
-
-<script>
-
-const video = document.getElementById("video")
-const canvas = document.getElementById("canvas")
-const ctx = canvas.getContext("2d")
-
-canvas.width = window.innerWidth
-canvas.height = window.innerHeight
-
-const SEGMENTS = 24
-const EDGE = 70
-
-let smoothColors = new Array(SEGMENTS).fill({r:0,g:0,b:0})
-
-document.getElementById("start").onclick = async () => {
-
-const stream = await navigator.mediaDevices.getDisplayMedia({video:true})
-video.srcObject = stream
-
-requestAnimationFrame(loop)
-
-}
-
-function avg(data){
-
-let r=0,g=0,b=0,count=0
-
-for(let i=0;i<data.length;i+=32){
-
-r+=data[i]
-g+=data[i+1]
-b+=data[i+2]
-count++
-
-}
-
-return {r:r/count,g:g/count,b:b/count}
-
-}
-
-function smooth(old,newc){
-
-return{
-r:old.r*0.8 + newc.r*0.2,
-g:old.g*0.8 + newc.g*0.2,
-b:old.b*0.8 + newc.b*0.2
-}
-
-}
-
-function drawLight(color,x,y,w,h,dir){
-
-let gradient
-
-if(dir==="top"){
-
-gradient = ctx.createLinearGradient(x,y,x,y+300)
-
-gradient.addColorStop(0,`rgba(${color.r},${color.g},${color.b},0.9)`)
-gradient.addColorStop(1,"rgba(0,0,0,0)")
-
-}
-
-if(dir==="left"){
-
-gradient = ctx.createLinearGradient(x,y,x+300,y)
-
-gradient.addColorStop(0,`rgba(${color.r},${color.g},${color.b},0.9)`)
-gradient.addColorStop(1,"rgba(0,0,0,0)")
-
-}
-
-if(dir==="right"){
-
-gradient = ctx.createLinearGradient(x,y,x-300,y)
-
-gradient.addColorStop(0,`rgba(${color.r},${color.g},${color.b},0.9)`)
-gradient.addColorStop(1,"rgba(0,0,0,0)")
-
-}
-
-ctx.fillStyle = gradient
-ctx.fillRect(x,y,w,h)
-
-}
-
-function loop(){
-
-if(video.readyState>=2){
-
-let temp=document.createElement("canvas")
-let tctx=temp.getContext("2d")
-
-temp.width=video.videoWidth
-temp.height=video.videoHeight
-
-tctx.drawImage(video,0,0)
-
-ctx.clearRect(0,0,canvas.width,canvas.height)
-
-let segmentWidth = temp.width/SEGMENTS
-
-for(let i=0;i<SEGMENTS;i++){
-
-let img = tctx.getImageData(i*segmentWidth,0,segmentWidth,EDGE)
-
-let c = avg(img.data)
-
-smoothColors[i]=smooth(smoothColors[i],c)
-
-let screenX = i*(canvas.width/SEGMENTS)
-
-drawLight(
-smoothColors[i],
-screenX,
-0,
-canvas.width/SEGMENTS,
-300,
-"top"
-)
-
-}
-
-let segmentHeight=temp.height/SEGMENTS
-
-for(let i=0;i<SEGMENTS;i++){
-
-let img = tctx.getImageData(0,i*segmentHeight,EDGE,segmentHeight)
-
-let c = avg(img.data)
-
-let sc = smooth({r:0,g:0,b:0},c)
-
-let screenY = i*(canvas.height/SEGMENTS)
-
-drawLight(sc,0,screenY,300,canvas.height/SEGMENTS,"left")
-
-}
-
-for(let i=0;i<SEGMENTS;i++){
-
-let img = tctx.getImageData(temp.width-EDGE,i*segmentHeight,EDGE,segmentHeight)
-
-let c = avg(img.data)
-
-let sc = smooth({r:0,g:0,b:0},c)
-
-let screenY = i*(canvas.height/SEGMENTS)
-
-drawLight(sc,canvas.width,screenY,-300,canvas.height/SEGMENTS,"right")
-
-}
-
-}
-
-requestAnimationFrame(loop)
-
-}
-
-</script>
-
+    <div id="controls">
+        <h2>Simulateur Ambilight Direct</h2>
+        <p>Capturez votre jeu pour projeter les couleurs</p>
+        <button id="startBtn">Démarrer l'Ambilight</button>
+    </div>
+
+    <div id="ambilight-container">
+        <div id="glow-top" class="glow"></div>
+        <div id="glow-left" class="glow"></div>
+        <div id="glow-right" class="glow"></div>
+    </div>
+
+    <video id="video" autoplay></video>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const startBtn = document.getElementById('startBtn');
+        
+        const glows = {
+            top: document.getElementById('glow-top'),
+            left: document.getElementById('glow-left'),
+            right: document.getElementById('glow-right')
+        };
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { cursor: "never" },
+                    audio: false
+                });
+                video.srcObject = stream;
+                document.getElementById('controls').style.display = 'none';
+                updateAmbilight();
+            } catch (err) {
+                console.error("Erreur de capture : " + err);
+            }
+        });
+
+        function updateAmbilight() {
+            if (video.paused || video.ended) return;
+
+            // On dessine la vidéo dans un petit canvas pour optimiser les performances
+            canvas.width = 160;
+            canvas.height = 90;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Analyse des zones
+            // Haut : échantillon sur la ligne supérieure
+            const topColor = getAverageColor(0, 0, canvas.width, 10);
+            // Gauche : échantillon sur la colonne de gauche
+            const leftColor = getAverageColor(0, 0, 10, canvas.height);
+            // Droite : échantillon sur la colonne de droite
+            const rightColor = getAverageColor(canvas.width - 10, 0, 10, canvas.height);
+
+            // Application des couleurs avec un dégradé radial pour la douceur
+            glows.top.style.background = `radial-gradient(circle, ${topColor} 0%, transparent 70%)`;
+            glows.left.style.background = `radial-gradient(circle, ${leftColor} 0%, transparent 70%)`;
+            glows.right.style.background = `radial-gradient(circle, ${rightColor} 0%, transparent 70%)`;
+
+            requestAnimationFrame(updateAmbilight);
+        }
+
+        function getAverageColor(x, y, w, h) {
+            const imageData = ctx.getImageData(x, y, w, h).data;
+            let r = 0, g = 0, b = 0;
+            const count = imageData.length / 4;
+
+            for (let i = 0; i < imageData.length; i += 4) {
+                r += imageData[i];
+                g += imageData[i + 1];
+                b += imageData[i + 2];
+            }
+
+            return `rgb(${Math.round(r/count)}, ${Math.round(g/count)}, ${Math.round(b/count)})`;
+        }
+    </script>
 </body>
 </html>
