@@ -2,66 +2,85 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Ambilight Pro - Ultra Soft</title>
+    <title>OBS Ambilight Pro - Ultra Soft Edge</title>
     <style>
         body { margin: 0; overflow: hidden; background: transparent; font-family: sans-serif; }
         
-        #ambilight-container {
+        #ambilight-wrapper {
             position: absolute;
-            top: 15vh;
-            left: 15vw;
-            width: 70vw;
-            height: 70vh;
-            z-index: 1;
-            opacity: 0; 
-            transition: opacity 1.5s ease-in-out;
-            /* L'astuce : un arrondi total pour fusionner les ombres au centre */
-            border-radius: 50%; 
+            top: 0; left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            opacity: 0;
+            transition: opacity 2s ease;
         }
 
-        #ambilight-glow {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            /* Filtre de lissage supplémentaire */
-            filter: blur(50px);
+        /* Les zones de projection */
+        .glow-zone {
+            position: absolute;
+            filter: blur(80px); /* Flou massif pour la douceur */
+            mix-blend-mode: screen; /* Fusionne mieux avec les fonds sombres */
+            pointer-events: none;
+        }
+
+        #glow-top {
+            top: -10vh; left: 10vw; width: 80vw; height: 30vh;
+            border-radius: 50% 50% 0 0;
+        }
+
+        #glow-left {
+            top: 10vh; left: -10vw; width: 30vw; height: 80vh;
+            border-radius: 50% 0 0 50%;
+        }
+
+        #glow-right {
+            top: 10vh; right: -10vw; width: 30vw; height: 80vh;
+            border-radius: 0 50% 50% 0;
         }
 
         #start-btn {
             position: fixed;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            padding: 25px 40px;
-            font-size: 1.2em;
-            background: #111;
-            color: #fff;
-            border: 1px solid #333; cursor: pointer; border-radius: 8px;
-            z-index: 100;
-            box-shadow: 0 10px 30px rgba(0,0,0,1);
+            padding: 20px 30px;
+            background: #1a1a1a;
+            color: white;
+            border: 1px solid #444;
+            cursor: pointer;
+            border-radius: 12px;
+            z-index: 1000;
         }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">ACTIVER L'EFFET IMMERSIF<br><small>(Clic droit > Interagir dans OBS)</small></button>
+    <button id="start-btn">ACTIVER L'EFFET DOUX (HAUT/CÔTÉS)</button>
     
-    <div id="ambilight-container">
-        <div id="ambilight-glow"></div>
+    <div id="ambilight-wrapper">
+        <div id="glow-top" class="glow-zone"></div>
+        <div id="glow-left" class="glow-zone"></div>
+        <div id="glow-right" class="glow-zone"></div>
     </div>
     
     <canvas id="procCanvas" style="display:none;"></canvas>
 
     <script>
         const btn = document.getElementById('start-btn');
-        const container = document.getElementById('ambilight-container');
-        const glow = document.getElementById('ambilight-glow');
+        const wrapper = document.getElementById('ambilight-wrapper');
+        const zones = {
+            top: document.getElementById('glow-top'),
+            left: document.getElementById('glow-left'),
+            right: document.getElementById('glow-right')
+        };
         const canvas = document.getElementById('procCanvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         btn.onclick = async () => {
             try {
                 const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { width: 1280, height: 720 }, // Résolution réduite pour fluidité
+                    video: { width: 640, height: 360 }, // Résolution basse = meilleure performance
                     audio: false
                 });
 
@@ -69,56 +88,51 @@
                 video.srcObject = stream;
                 video.play();
 
-                btn.style.display = 'none'; 
-                container.style.opacity = '1';
+                btn.style.display = 'none';
+                wrapper.style.opacity = '1';
 
                 video.onplaying = () => {
-                    canvas.width = 16; // Basse résolution = mélange de couleurs naturel
-                    canvas.height = 9;
+                    canvas.width = 10; 
+                    canvas.height = 10;
                     render();
                 };
 
                 function render() {
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-                    
-                    // On échantillonne des zones plutôt que des pixels uniques
-                    const cTopLeft = getAvgRGB(data, 2, 2);
-                    const cTopRight = getAvgRGB(data, 13, 2);
-                    const cBottomLeft = getAvgRGB(data, 2, 7);
-                    const cBottomRight = getAvgRGB(data, 13, 7);
 
-                    // Calcul de la couleur moyenne centrale pour "lier" le tout
-                    const cCenter = getAvgRGB(data, 8, 4);
+                    // Analyse des zones spécifiques
+                    const topColor = getAreaColor(data, 0, 0, 10, 3);    // Bande haute
+                    const leftColor = getAreaColor(data, 0, 0, 3, 10);   // Bande gauche
+                    const rightColor = getAreaColor(data, 7, 0, 3, 10);  // Bande droite
 
-                    glow.style.boxShadow = `
-                        /* COUCHE DE COEUR (Lien central) */
-                        0 0 300px 100px ${cCenter},
-                        
-                        /* COUCHE ATMOSPHÉRIQUE (Très diffuse) */
-                        -20vw -15vh 450px 50px ${cTopLeft}, 
-                        20vw -15vh 450px 50px ${cTopRight},
-                        -20vw 15vh 450px 50px ${cBottomLeft},
-                        20vw 15vh 450px 50px ${cBottomRight},
-
-                        /* COUCHE DE BORDURE (Plus colorée) */
-                        -10vw -10vh 150px 0px ${cTopLeft}, 
-                        10vw -10vh 150px 0px ${cTopRight},
-                        -10vw 10vh 150px 0px ${cBottomLeft},
-                        10vw 10vh 150px 0px ${cBottomRight}
-                    `;
+                    // Application des couleurs avec un dégradé interne pour la douceur
+                    zones.top.style.background = `radial-gradient(ellipse at bottom, ${topColor}, transparent 80%)`;
+                    zones.left.style.background = `radial-gradient(ellipse at right, ${leftColor}, transparent 80%)`;
+                    zones.right.style.background = `radial-gradient(ellipse at left, ${rightColor}, transparent 80%)`;
 
                     requestAnimationFrame(render);
                 }
 
-                function getAvgRGB(data, x, y) {
-                    const i = (y * canvas.width + x) * 4;
-                    // Boost de saturation léger (1.2) pour compenser le flou
-                    return `rgba(${data[i]}, ${data[i+1]}, ${data[i+2]}, 0.8)`;
+                function getAreaColor(data, xStart, yStart, width, height) {
+                    let r = 0, g = 0, b = 0, count = 0;
+                    
+                    for (let y = yStart; y < yStart + height; y++) {
+                        for (let x = xStart; x < xStart + width; x++) {
+                            const i = (y * 10 + x) * 4;
+                            r += data[i];
+                            g += data[i+1];
+                            b += data[i+2];
+                            count++;
+                        }
+                    }
+                    
+                    // On arrondit et on ajoute une opacité légère pour le côté "soft"
+                    return `rgba(${Math.floor(r/count)}, ${Math.floor(g/count)}, ${Math.floor(b/count)}, 0.7)`;
                 }
 
             } catch (err) {
-                console.error(err);
+                console.error("Erreur d'accès à l'écran:", err);
             }
         };
     </script>
