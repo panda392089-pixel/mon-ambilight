@@ -1,113 +1,59 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <title>Ambilight OBS Fix</title>
-    <style>
-        body {
-            margin: 0;
-            background-color: #000; /* Fond noir pur pour OBS */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
-        }
+<style>
+    /* ... (ton reste de CSS) ... */
+    .glow-zone {
+        /* On utilise background-color au lieu de radial-gradient pour plus de performance */
+        background-color: transparent; 
+        filter: blur(150px); /* Le flou crée l'effet de diffusion sans le coût du gradient */
+        will-change: background-color;
+        transition: none !important;
+    }
+</style>
 
-        #wrapper {
-            position: relative;
-            width: 85%;
-            aspect-ratio: 16/9;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+<script>
+    // ... (début du script identique) ...
 
-        /* La vidéo doit être visible pour qu'OBS la capture */
-        video {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            position: relative;
-            z-index: 10; 
-            border-radius: 4px;
-        }
+    // 1. PASSE LE SMOOTHING À 1 (Désactive le délai)
+    const SMOOTHING = 1; 
 
-        .glow-zone {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(120px);
-            opacity: 0.8;
-            mix-blend-mode: screen;
-            z-index: 1;
-            will-change: background-color;
-        }
+    btn.onclick = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: { 
+                    width: 128, 
+                    height: 72, 
+                    frameRate: 60 // Assure-toi que c'est bien à 60
+                },
+                // Optionnel : réduit la latence système
+                selfBrowserSurface: "exclude", 
+                surfaceSwitching: "include"
+            });
 
-        /* Zones ajustées pour OBS */
-        #top    { width: 80%; height: 60%; top: -30%; left: 10%; }
-        #left   { width: 50%; height: 80%; top: 10%; left: -25%; }
-        #right  { width: 50%; height: 80%; top: 10%; right: -25%; }
+            // ... (création vidéo identique) ...
 
-        #startBtn {
-            position: absolute;
-            z-index: 100;
-            padding: 20px;
-            cursor: pointer;
-        }
-    </style>
-</head>
-<body>
+            function renderLoop() {
+                if (video.paused || video.ended) return;
 
-    <button id="startBtn">CLIQUEZ ICI PUIS CHOISISSEZ LA SOURCE</button>
+                // Capture ultra-rapide
+                ctx.drawImage(video, 0, 0, 3, 3);
+                const data = ctx.getImageData(0, 0, 3, 3).data;
 
-    <div id="wrapper">
-        <div id="top" class="glow-zone"></div>
-        <div id="left" class="glow-zone"></div>
-        <div id="right" class="glow-zone"></div>
-        <video id="v" autoplay muted playsinline></video>
-    </div>
+                for (let id in zones) {
+                    const z = zones[id];
+                    const i = (z.y * 3 + z.x) * 4;
+                    
+                    // On prend la couleur brute directement
+                    const r = data[i];
+                    const g = data[i+1];
+                    const b = data[i+2];
 
-    <script>
-        const btn = document.getElementById('startBtn');
-        const video = document.getElementById('v');
-        const zones = {
-            'top':   { x: 1, y: 0 },
-            'left':  { x: 0, y: 1 },
-            'right': { x: 2, y: 1 }
-        };
-
-        const canvas = document.createElement('canvas');
-        canvas.width = 3;
-        canvas.height = 3;
-        const ctx = canvas.getContext('2d', { alpha: false });
-
-        btn.onclick = async () => {
-            try {
-                // Pour OBS, on demande la capture d'écran/fenêtre
-                const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { cursor: "never" },
-                    audio: false
-                });
-                
-                video.srcObject = stream;
-                btn.style.display = 'none';
-
-                function render() {
-                    if (!video.paused && !video.ended) {
-                        ctx.drawImage(video, 0, 0, 3, 3);
-                        const data = ctx.getImageData(0, 0, 3, 3).data;
-
-                        for (let id in zones) {
-                            const i = (zones[id].y * 3 + zones[id].x) * 4;
-                            document.getElementById(id).style.backgroundColor = 
-                                `rgb(${data[i]},${data[i+1]},${data[i+2]})`;
-                        }
-                    }
-                    requestAnimationFrame(render);
+                    // Mise à jour directe de la couleur de fond (plus rapide que le gradient)
+                    // Le flou CSS (filter: blur) s'occupe de l'aspect esthétique
+                    document.getElementById(id).style.backgroundColor = `rgb(${r},${g},${b})`;
                 }
-                render();
-            } catch (err) { console.error(err); }
-        };
-    </script>
-</body>
-</html>
+                
+                // Utilisation de requestAnimationFrame pour synchroniser avec l'écran
+                requestAnimationFrame(renderLoop);
+            }
+        } catch (err) { console.error(err); }
+    };
+</script>
