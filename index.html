@@ -1,128 +1,116 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <style>
-        body {
-            margin: 0;
-            background: transparent;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
+<meta charset="UTF-8">
+<title>Ambilight Frame</title>
 
-        /* Conteneur principal sans bordure visible */
-        .ambilight-wrapper {
-            position: relative;
-            width: 90vw;
-            height: 50.6vw;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+<style>
+body{
+    margin:0;
+    background:#000;
+    overflow:hidden;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
 
-        /* Les sources de lumière : on utilise des halos radiaux */
-        .light-engine {
-            position: absolute;
-            top: -20%; left: -20%;
-            width: 140%; height: 140%;
-            z-index: -1;
-            /* Le flou est poussé au maximum pour casser toute forme géométrique */
-            filter: blur(120px) saturate(200%) brightness(1.2);
-            pointer-events: none;
-        }
+/* cadre */
+#frame{
+    position:relative;
+    width:90vw;
+    height:90vh;
+    border-top:20px solid red;
+    border-left:20px solid red;
+    border-right:20px solid red;
+    box-shadow:
+        0 -40px 120px red,
+        -40px 0 120px red,
+        40px 0 120px red;
+}
 
-        .halo {
-            position: absolute;
-            width: 70%;
-            height: 70%;
-            border-radius: 50%;
-            opacity: 0.8;
-            transition: background 0.2s ease-out;
-        }
-
-        /* Positionnement des 4 halos pour qu'ils se chevauchent doucement */
-        #h-top    { top: 0; left: 15%; background: radial-gradient(circle, var(--c-top) 0%, transparent 70%); }
-        #h-bottom { bottom: 0; left: 15%; background: radial-gradient(circle, var(--c-bottom) 0%, transparent 70%); }
-        #h-left   { left: 0; top: 15%; background: radial-gradient(circle, var(--c-left) 0%, transparent 70%); }
-        #h-right  { right: 0; top: 15%; background: radial-gradient(circle, var(--c-right) 0%, transparent 70%); }
-
-        /* Setup OBS */
-        #setup-layer {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9);
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 100; color: white; cursor: pointer; font-family: sans-serif;
-        }
-        .instruction { border: 2px dashed #555; padding: 30px; border-radius: 15px; text-transform: uppercase; letter-spacing: 2px; }
-    </style>
+/* canvas caché pour analyser l'image */
+#capture{
+    display:none;
+}
+</style>
 </head>
+
 <body>
 
-    <div id="setup-layer">
-        <div class="instruction">Cliquer pour synchroniser le flux</div>
-    </div>
-    
-    <div class="ambilight-wrapper">
-        <div class="light-engine">
-            <div id="h-top" class="halo" style="--c-top: transparent"></div>
-            <div id="h-bottom" class="halo" style="--c-bottom: transparent"></div>
-            <div id="h-left" class="halo" style="--c-left: transparent"></div>
-            <div id="h-right" class="halo" style="--c-right: transparent"></div>
-        </div>
-        </div>
+<div id="frame"></div>
+<canvas id="capture"></canvas>
 
-    <canvas id="proc-canvas" style="display:none;"></canvas>
+<script>
 
-    <script>
-        const halos = {
-            top: document.getElementById('h-top'),
-            bottom: document.getElementById('h-bottom'),
-            left: document.getElementById('h-left'),
-            right: document.getElementById('h-right')
-        };
-        const setup = document.getElementById('setup-layer');
-        const canvas = document.getElementById('proc-canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+const frame = document.getElementById("frame");
+const canvas = document.getElementById("capture");
+const ctx = canvas.getContext("2d");
 
-        setup.onclick = async () => {
-            try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.play();
-                setup.style.display = 'none';
+async function startCapture(){
 
-                video.onloadedmetadata = () => {
-                    canvas.width = 32; canvas.height = 18;
-                    function update() {
-                        if (video.paused || video.ended) return;
-                        ctx.drawImage(video, 0, 0, 32, 18);
-                        
-                        // Calcul des couleurs avec une fonction simplifiée
-                        halos.top.style.setProperty('--c-top', getAreaColor(0, 0, 32, 4));
-                        halos.bottom.style.setProperty('--c-bottom', getAreaColor(0, 14, 32, 4));
-                        halos.left.style.setProperty('--c-left', getAreaColor(0, 0, 4, 18));
-                        halos.right.style.setProperty('--c-right', getAreaColor(28, 0, 4, 18));
-                        
-                        requestAnimationFrame(update);
-                    }
-                    update();
-                };
-            } catch (e) { console.error(e); }
-        };
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+        video:true
+    });
 
-        function getAreaColor(x, y, w, h) {
-            const data = ctx.getImageData(x, y, w, h).data;
-            let r=0, g=0, b=0;
-            for(let i=0; i<data.length; i+=16) { // On échantillonne 1 pixel sur 4 pour la fluidité
-                r += data[i]; g += data[i+1]; b += data[i+2];
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    await video.play();
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    function update(){
+
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
+        const edge = 40;
+
+        const top = ctx.getImageData(0,0,canvas.width,edge);
+        const left = ctx.getImageData(0,0,edge,canvas.height);
+        const right = ctx.getImageData(canvas.width-edge,0,edge,canvas.height);
+
+        function averageColor(data){
+
+            let r=0,g=0,b=0,count=0;
+
+            for(let i=0;i<data.data.length;i+=4){
+
+                r+=data.data[i];
+                g+=data.data[i+1];
+                b+=data.data[i+2];
+                count++;
             }
-            const count = data.length / 16;
-            return `rgb(${Math.round(r/count)}, ${Math.round(g/count)}, ${Math.round(b/count)})`;
+
+            r=Math.floor(r/count);
+            g=Math.floor(g/count);
+            b=Math.floor(b/count);
+
+            return `rgb(${r},${g},${b})`;
         }
-    </script>
+
+        const topColor = averageColor(top);
+        const leftColor = averageColor(left);
+        const rightColor = averageColor(right);
+
+        frame.style.borderTopColor = topColor;
+        frame.style.borderLeftColor = leftColor;
+        frame.style.borderRightColor = rightColor;
+
+        frame.style.boxShadow =
+            `0 -40px 120px ${topColor},
+             -40px 0 120px ${leftColor},
+             40px 0 120px ${rightColor}`;
+
+        requestAnimationFrame(update);
+    }
+
+    update();
+}
+
+startCapture();
+
+</script>
+
 </body>
 </html>
