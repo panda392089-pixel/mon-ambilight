@@ -1,169 +1,59 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ambilight Gaming Pro - Ultra Low Latency</title>
-    <style>
-        /* Optimisation du moteur de rendu */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body { 
-            background: #000; 
-            overflow: hidden; 
-            height: 100vh;
-            width: 100vw;
-        }
+<style>
+    /* ... (ton reste de CSS) ... */
+    .glow-zone {
+        /* On utilise background-color au lieu de radial-gradient pour plus de performance */
+        background-color: transparent; 
+        filter: blur(150px); /* Le flou crée l'effet de diffusion sans le coût du gradient */
+        will-change: background-color;
+        transition: none !important;
+    }
+</style>
 
-        /* Conteneur principal */
-        #ambilight-wrapper {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            pointer-events: none;
-            z-index: -1;
-            transform: translateZ(0); /* Force l'accélération GPU */
-        }
+<script>
+    // ... (début du script identique) ...
 
-        /* Zones de lumière : on utilise des div simples avec flou */
-        .glow-zone {
-            position: absolute;
-            filter: blur(100px); /* Ajuste selon ton goût (50px à 150px) */
-            opacity: 0.85;
-            will-change: background-color;
-            transition: none !important; /* AUCUN lissage pour l'instantanéité */
-        }
+    // 1. PASSE LE SMOOTHING À 1 (Désactive le délai)
+    const SMOOTHING = 1; 
 
-        /* Disposition périmétrale */
-        #z-top    { top: -10vh; left: 0; width: 100vw; height: 30vh; }
-        #z-left   { top: 0; left: -10vw; width: 30vw; height: 100vh; }
-        #z-right  { top: 0; right: -10vw; width: 30vw; height: 100vh; }
-        #z-bottom { bottom: -10vh; left: 0; width: 100vw; height: 30vh; }
+    btn.onclick = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+                video: { 
+                    width: 128, 
+                    height: 72, 
+                    frameRate: 60 // Assure-toi que c'est bien à 60
+                },
+                // Optionnel : réduit la latence système
+                selfBrowserSurface: "exclude", 
+                surfaceSwitching: "include"
+            });
 
-        /* Interface */
-        #ui-layer {
-            position: fixed;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            z-index: 100;
-        }
+            // ... (création vidéo identique) ...
 
-        button {
-            padding: 20px 40px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            background: transparent;
-            color: white;
-            border: 2px solid white;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-family: 'Segoe UI', sans-serif;
-        }
+            function renderLoop() {
+                if (video.paused || video.ended) return;
 
-        button:hover {
-            background: white;
-            color: black;
-        }
+                // Capture ultra-rapide
+                ctx.drawImage(video, 0, 0, 3, 3);
+                const data = ctx.getImageData(0, 0, 3, 3).data;
 
-        canvas { display: none; }
-    </style>
-</head>
-<body>
+                for (let id in zones) {
+                    const z = zones[id];
+                    const i = (z.y * 3 + z.x) * 4;
+                    
+                    // On prend la couleur brute directement
+                    const r = data[i];
+                    const g = data[i+1];
+                    const b = data[i+2];
 
-    <div id="ui-layer">
-        <button id="start-btn">DÉMARRER LE FLUX GAMING</button>
-        <p style="color: #666; margin-top: 15px; font-family: sans-serif;">Sélectionnez votre écran de jeu</p>
-    </div>
-
-    <div id="ambilight-wrapper">
-        <div id="z-top" class="glow-zone"></div>
-        <div id="z-left" class="glow-zone"></div>
-        <div id="z-right" class="glow-zone"></div>
-        <div id="z-bottom" class="glow-zone"></div>
-    </div>
-
-    <canvas id="procCanvas"></canvas>
-
-    <script>
-        const btn = document.getElementById('start-btn');
-        const canvas = document.getElementById('procCanvas');
-        const ctx = canvas.getContext('2d', { 
-            alpha: false, 
-            desynchronized: true, // Optimisation pour réduire la latence canvas
-            willReadFrequently: true 
-        });
-
-        // Mapping des pixels sur notre grille de capture 3x3
-        const zones = {
-            'z-top':    { x: 1, y: 0 },
-            'z-left':   { x: 0, y: 1 },
-            'z-right':  { x: 2, y: 1 },
-            'z-bottom': { x: 1, y: 2 }
-        };
-
-        // Facteur de saturation (1.0 = normal, 1.5 = couleurs vives)
-        const SATURATION_BOOST = 1.4;
-
-        btn.onclick = async () => {
-            try {
-                // Capture d'écran native
-                const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { 
-                        width: { ideal: 128 }, 
-                        height: { ideal: 72 },
-                        frameRate: { ideal: 60 } 
-                    },
-                    audio: false
-                });
-
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.muted = true;
-                video.play();
-
-                document.getElementById('ui-layer').style.display = 'none';
-
-                video.onplaying = () => {
-                    // On travaille sur un canvas minuscule (3x3) pour une vitesse absolue
-                    canvas.width = 3;
-                    canvas.height = 3;
-                    renderLoop();
-                };
-
-                function renderLoop() {
-                    if (video.paused || video.ended) return;
-
-                    // Étape 1 : Capture instantanée
-                    ctx.drawImage(video, 0, 0, 3, 3);
-                    const data = ctx.getImageData(0, 0, 3, 3).data;
-
-                    // Étape 2 : Traitement et application
-                    for (let id in zones) {
-                        const z = zones[id];
-                        const i = (z.y * 3 + z.x) * 4;
-
-                        let r = data[i];
-                        let g = data[i+1];
-                        let b = data[i+2];
-
-                        // Application du boost de saturation
-                        const gray = 0.2989 * r + 0.5870 * g + 0.1140 * b;
-                        r = Math.max(0, Math.min(255, gray + (r - gray) * SATURATION_BOOST));
-                        g = Math.max(0, Math.min(255, gray + (g - gray) * SATURATION_BOOST));
-                        b = Math.max(0, Math.min(255, gray + (b - gray) * SATURATION_BOOST));
-
-                        // Étape 3 : Mise à jour DOM sans délai
-                        document.getElementById(id).style.backgroundColor = `rgb(${r},${g},${b})`;
-                    }
-
-                    requestAnimationFrame(renderLoop);
+                    // Mise à jour directe de la couleur de fond (plus rapide que le gradient)
+                    // Le flou CSS (filter: blur) s'occupe de l'aspect esthétique
+                    document.getElementById(id).style.backgroundColor = `rgb(${r},${g},${b})`;
                 }
-            } catch (err) {
-                console.error("Erreur de capture : ", err);
+                
+                // Utilisation de requestAnimationFrame pour synchroniser avec l'écran
+                requestAnimationFrame(renderLoop);
             }
-        };
-    </script>
-</body>
-</html>
+        } catch (err) { console.error(err); }
+    };
+</script>
