@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Ambilight Screen Glow</title>
+<title>Realistic Ambilight</title>
 
 <style>
 
@@ -12,7 +12,7 @@ background:black;
 overflow:hidden;
 }
 
-#canvas{
+canvas{
 position:fixed;
 top:0;
 left:0;
@@ -30,11 +30,11 @@ position:fixed;
 top:20px;
 left:20px;
 z-index:10;
-padding:10px 20px;
-font-size:16px;
+padding:12px 20px;
+font-size:15px;
 background:#111;
 color:white;
-border:1px solid #444;
+border:1px solid #333;
 cursor:pointer;
 }
 
@@ -56,89 +56,153 @@ const ctx = canvas.getContext("2d")
 canvas.width = window.innerWidth
 canvas.height = window.innerHeight
 
-async function startCapture(){
+const SEGMENTS = 24
+const EDGE = 70
 
-const stream = await navigator.mediaDevices.getDisplayMedia({
-video:true
-})
+let smoothColors = new Array(SEGMENTS).fill({r:0,g:0,b:0})
 
+document.getElementById("start").onclick = async () => {
+
+const stream = await navigator.mediaDevices.getDisplayMedia({video:true})
 video.srcObject = stream
 
-requestAnimationFrame(draw)
+requestAnimationFrame(loop)
 
 }
 
-document.getElementById("start").onclick = startCapture
+function avg(data){
 
-function getAverageColor(data){
+let r=0,g=0,b=0,count=0
 
-let r=0,g=0,b=0
-let count=0
-
-for(let i=0;i<data.length;i+=40){
+for(let i=0;i<data.length;i+=32){
 
 r+=data[i]
 g+=data[i+1]
 b+=data[i+2]
-
 count++
 
 }
 
-return {
-r:r/count,
-g:g/count,
-b:b/count
+return {r:r/count,g:g/count,b:b/count}
+
+}
+
+function smooth(old,newc){
+
+return{
+r:old.r*0.8 + newc.r*0.2,
+g:old.g*0.8 + newc.g*0.2,
+b:old.b*0.8 + newc.b*0.2
 }
 
 }
 
-function drawGlow(color,x,y,w,h){
+function drawLight(color,x,y,w,h,dir){
 
-let gradient = ctx.createRadialGradient(
-x+w/2,y+h/2,0,
-x+w/2,y+h/2,300
-)
+let gradient
 
-gradient.addColorStop(0,`rgba(${color.r},${color.g},${color.b},0.7)`)
+if(dir==="top"){
+
+gradient = ctx.createLinearGradient(x,y,x,y+300)
+
+gradient.addColorStop(0,`rgba(${color.r},${color.g},${color.b},0.9)`)
 gradient.addColorStop(1,"rgba(0,0,0,0)")
+
+}
+
+if(dir==="left"){
+
+gradient = ctx.createLinearGradient(x,y,x+300,y)
+
+gradient.addColorStop(0,`rgba(${color.r},${color.g},${color.b},0.9)`)
+gradient.addColorStop(1,"rgba(0,0,0,0)")
+
+}
+
+if(dir==="right"){
+
+gradient = ctx.createLinearGradient(x,y,x-300,y)
+
+gradient.addColorStop(0,`rgba(${color.r},${color.g},${color.b},0.9)`)
+gradient.addColorStop(1,"rgba(0,0,0,0)")
+
+}
 
 ctx.fillStyle = gradient
 ctx.fillRect(x,y,w,h)
 
 }
 
-function draw(){
+function loop(){
 
 if(video.readyState>=2){
 
-let tempCanvas=document.createElement("canvas")
-let tempCtx=tempCanvas.getContext("2d")
+let temp=document.createElement("canvas")
+let tctx=temp.getContext("2d")
 
-tempCanvas.width=video.videoWidth
-tempCanvas.height=video.videoHeight
+temp.width=video.videoWidth
+temp.height=video.videoHeight
 
-tempCtx.drawImage(video,0,0)
-
-let edgeSize=80
-
-let top = tempCtx.getImageData(0,0,tempCanvas.width,edgeSize)
-let left = tempCtx.getImageData(0,0,edgeSize,tempCanvas.height)
-let right = tempCtx.getImageData(tempCanvas.width-edgeSize,0,edgeSize,tempCanvas.height)
-
-let topColor=getAverageColor(top.data)
-let leftColor=getAverageColor(left.data)
-let rightColor=getAverageColor(right.data)
+tctx.drawImage(video,0,0)
 
 ctx.clearRect(0,0,canvas.width,canvas.height)
 
-drawGlow(topColor,0,0,canvas.width,200)
-drawGlow(leftColor,0,0,200,canvas.height)
-drawGlow(rightColor,canvas.width-200,0,200,canvas.height)
+let segmentWidth = temp.width/SEGMENTS
+
+for(let i=0;i<SEGMENTS;i++){
+
+let img = tctx.getImageData(i*segmentWidth,0,segmentWidth,EDGE)
+
+let c = avg(img.data)
+
+smoothColors[i]=smooth(smoothColors[i],c)
+
+let screenX = i*(canvas.width/SEGMENTS)
+
+drawLight(
+smoothColors[i],
+screenX,
+0,
+canvas.width/SEGMENTS,
+300,
+"top"
+)
 
 }
 
-requestAnimationFrame(draw)
+let segmentHeight=temp.height/SEGMENTS
+
+for(let i=0;i<SEGMENTS;i++){
+
+let img = tctx.getImageData(0,i*segmentHeight,EDGE,segmentHeight)
+
+let c = avg(img.data)
+
+let sc = smooth({r:0,g:0,b:0},c)
+
+let screenY = i*(canvas.height/SEGMENTS)
+
+drawLight(sc,0,screenY,300,canvas.height/SEGMENTS,"left")
+
+}
+
+for(let i=0;i<SEGMENTS;i++){
+
+let img = tctx.getImageData(temp.width-EDGE,i*segmentHeight,EDGE,segmentHeight)
+
+let c = avg(img.data)
+
+let sc = smooth({r:0,g:0,b:0},c)
+
+let screenY = i*(canvas.height/SEGMENTS)
+
+drawLight(sc,canvas.width,screenY,-300,canvas.height/SEGMENTS,"right")
+
+}
+
+}
+
+requestAnimationFrame(loop)
 
 }
 
