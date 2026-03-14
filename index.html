@@ -1,53 +1,112 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+    <meta charset="UTF-8">
     <style>
         body {
             margin: 0;
-            overflow: hidden;
             background: transparent;
+            overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
         }
 
-        .ambilight-container {
+        /* Le cadre qui contiendra la lueur */
+        .ambilight-frame {
             position: relative;
-            width: 80vw; /* Ajuste la taille de ton jeu ici */
-            height: 45vw; /* Ratio 16:9 */
-            box-shadow: 0 0 50px 30px rgba(0,0,0,0.5);
+            width: 90vw; /* Taille du cadre */
+            height: 50.6vw; /* Ratio 16:9 */
+            border: 2px solid rgba(255,255,255,0.1);
         }
 
-        /* L'élément qui crée l'effet de lumière */
-        .glow {
+        /* L'effet de halo lumineux */
+        #glow {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             z-index: -1;
-            /* Le flou intense crée l'effet diffuseur */
-            filter: blur(80px) brightness(1.5) saturate(200%);
-            transform: scale(1.1); /* Pour que la lumière dépasse du cadre */
+            filter: blur(60px) brightness(1.5) saturate(180%);
+            transform: scale(1.1);
+            transition: background-color 0.15s ease;
         }
 
-        video, canvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-            border-radius: 4px;
+        #start-btn {
+            position: absolute;
+            z-index: 10;
+            padding: 10px 20px;
+            cursor: pointer;
+            background: #111;
+            color: #fff;
+            border: 1px solid #444;
         }
     </style>
 </head>
 <body>
 
-    <div class="ambilight-container">
-        <div id="glow" class="glow"></div>
-        
-        <div id="game-placeholder" style="background: #000; width:100%; height:100%;">
-            </div>
+    <button id="start-btn">Connecter Gameplay</button>
+    
+    <div class="ambilight-frame">
+        <div id="glow"></div>
     </div>
 
+    <canvas id="proc-canvas" style="display:none;"></canvas>
+
+    <script>
+        const glow = document.getElementById('glow');
+        const btn = document.getElementById('start-btn');
+        const canvas = document.getElementById('proc-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        btn.onclick = async () => {
+            try {
+                // On demande la capture de l'écran ou de la fenêtre du jeu
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.play();
+                
+                btn.style.display = 'none';
+
+                video.onloadedmetadata = () => {
+                    canvas.width = 32; // Basse résolution pour la performance
+                    canvas.height = 18;
+                    
+                    function update() {
+                        if (video.paused || video.ended) return;
+                        
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        
+                        // Analyse de la couleur moyenne
+                        const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const length = frame.data.length;
+                        let r = 0, g = 0, b = 0;
+
+                        for (let i = 0; i < length; i += 4) {
+                            r += frame.data[i];
+                            g += frame.data[i+1];
+                            b += frame.data[i+2];
+                        }
+
+                        const count = length / 4;
+                        r = Math.floor(r / count);
+                        g = Math.floor(g / count);
+                        b = Math.floor(b / count);
+
+                        // Application de la couleur au halo
+                        glow.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+                        
+                        requestAnimationFrame(update);
+                    }
+                    update();
+                };
+            } catch (err) {
+                console.error("Erreur : " + err);
+            }
+        };
+    </script>
 </body>
 </html>
