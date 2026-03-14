@@ -1,122 +1,160 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <title>Ambilight - Liquid Motion</title>
-    <style>
-        body { margin: 0; overflow: hidden; background: transparent; }
-        
-        #ambilight-wrapper {
-            position: absolute;
-            top: -25vh; left: -25vw;
-            width: 150vw; height: 150vh;
-            pointer-events: none;
-            transform: translateZ(0);
-        }
+<meta charset="UTF-8">
+<title>Ambilight Ultra Reactive</title>
 
-        .glow-zone {
-            position: absolute;
-            width: 80vw;
-            height: 80vh;
-            mix-blend-mode: screen;
-            filter: blur(200px); /* Nuage encore plus diffus */
-            opacity: 0.9;
-            transition: none !important; /* On gère la fluidité en JS, pas en CSS */
-            will-change: background;
-        }
+<style>
+body { margin:0; overflow:hidden; background:transparent; }
 
-        #z-top    { top: 0; left: 35vw; }
-        #z-left   { left: 0; top: 35vh; }
-        #z-right  { right: 0; top: 35vh; }
-        #z-bottom { bottom: 0; left: 35vw; }
+#ambilight-wrapper{
+position:absolute;
+top:-25vh; left:-25vw;
+width:150vw; height:150vh;
+pointer-events:none;
+}
 
-        #start-btn {
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            padding: 15px 30px; background: #000; color: #fff; border: 1px solid #fff;
-            cursor: pointer; z-index: 1000; font-family: sans-serif;
-        }
-    </style>
+.glow-zone{
+position:absolute;
+width:80vw;
+height:80vh;
+mix-blend-mode:screen;
+filter:blur(180px);
+opacity:0.95;
+will-change:background;
+}
+
+#z-top{top:0; left:35vw;}
+#z-left{left:0; top:35vh;}
+#z-right{right:0; top:35vh;}
+#z-bottom{bottom:0; left:35vw;}
+
+#start-btn{
+position:fixed;
+top:50%; left:50%;
+transform:translate(-50%,-50%);
+padding:15px 30px;
+background:#000;
+color:#fff;
+border:1px solid #fff;
+cursor:pointer;
+z-index:1000;
+}
+</style>
 </head>
+
 <body>
 
-    <button id="start-btn">ACTIVER LE FLUX LIQUIDE</button>
-    <div id="ambilight-wrapper">
-        <div id="z-top" class="glow-zone"></div>
-        <div id="z-left" class="glow-zone"></div>
-        <div id="z-right" class="glow-zone"></div>
-        <div id="z-bottom" class="glow-zone"></div>
-    </div>
-    <canvas id="procCanvas" style="display:none;"></canvas>
+<button id="start-btn">ACTIVER AMBILIGHT</button>
 
-    <script>
-        const btn = document.getElementById('start-btn');
-        const canvas = document.getElementById('procCanvas');
-        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
-        
-        // Structure pour stocker l'état actuel des couleurs (pour le lissage)
-        const zones = {
-            'z-top':    { x: 1, y: 0, current: [0,0,0], target: [0,0,0] },
-            'z-left':   { x: 0, y: 1, current: [0,0,0], target: [0,0,0] },
-            'z-right':  { x: 2, y: 1, current: [0,0,0], target: [0,0,0] },
-            'z-bottom': { x: 1, y: 2, current: [0,0,0], target: [0,0,0] }
-        };
+<div id="ambilight-wrapper">
+<div id="z-top" class="glow-zone"></div>
+<div id="z-left" class="glow-zone"></div>
+<div id="z-right" class="glow-zone"></div>
+<div id="z-bottom" class="glow-zone"></div>
+</div>
 
-        // FACTEUR DE LISSAGE : 0.1 = très fluide/lent, 0.8 = très réactif/nerveux
-        const SMOOTHING = 0.15; 
+<canvas id="procCanvas" style="display:none;"></canvas>
 
-        btn.onclick = async () => {
-            try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { width: 128, height: 72, frameRate: 60 }
-                });
-                const video = document.createElement('video');
-                video.srcObject = stream;
-                video.muted = true;
-                video.play();
-                btn.style.display = 'none';
+<script>
 
-                video.onplaying = () => {
-                    canvas.width = 3; canvas.height = 3;
-                    renderLoop();
-                };
+const btn = document.getElementById("start-btn")
+const canvas = document.getElementById("procCanvas")
+const ctx = canvas.getContext("2d",{alpha:false,desynchronized:true})
 
-                function renderLoop() {
-                    if (video.paused || video.ended) return;
+const SIZE = 8
+canvas.width = SIZE
+canvas.height = SIZE
 
-                    // 1. Capture de la cible
-                    ctx.drawImage(video, 0, 0, 3, 3);
-                    const data = ctx.getImageData(0, 0, 3, 3).data;
+const zones = {
+'z-top':    {x:4,y:0,current:[0,0,0]},
+'z-left':   {x:0,y:4,current:[0,0,0]},
+'z-right':  {x:7,y:4,current:[0,0,0]},
+'z-bottom': {x:4,y:7,current:[0,0,0]}
+}
 
-                    for (let id in zones) {
-                        const z = zones[id];
-                        const i = (z.y * 3 + z.x) * 4;
-                        
-                        // 2. Calcul de la cible (avec boost de couleur)
-                        const avg = (data[i] + data[i+1] + data[i+2]) / 3;
-                        z.target = [
-                            data[i] + (data[i] - avg) * 0.8,
-                            data[i+1] + (data[i+1] - avg) * 0.8,
-                            data[i+2] + (data[i+2] - avg) * 0.8
-                        ];
+btn.onclick = async ()=>{
 
-                        // 3. INTERPOLATION LINÉAIRE (Le secret de la fluidité)
-                        // current = current + (target - current) * smoothing
-                        z.current[0] += (z.target[0] - z.current[0]) * SMOOTHING;
-                        z.current[1] += (z.target[1] - z.current[1]) * SMOOTHING;
-                        z.current[2] += (z.target[2] - z.current[2]) * SMOOTHING;
+const stream = await navigator.mediaDevices.getDisplayMedia({
+video:{
+width:128,
+height:72,
+frameRate:60
+}
+})
 
-                        // 4. Mise à jour visuelle
-                        const r = Math.round(z.current[0]);
-                        const g = Math.round(z.current[1]);
-                        const b = Math.round(z.current[2]);
-                        
-                        document.getElementById(id).style.background = 
-                            `radial-gradient(circle, rgb(${r},${g},${b}) 0%, transparent 85%)`;
-                    }
-                    requestAnimationFrame(renderLoop);
-                }
-            } catch (err) { console.error(err); }
-        };
-    </script>
+const video=document.createElement("video")
+video.srcObject=stream
+video.play()
+video.muted=true
+
+btn.style.display="none"
+
+video.onplaying=()=>{
+
+function loop(){
+
+ctx.drawImage(video,0,0,SIZE,SIZE)
+
+const data=ctx.getImageData(0,0,SIZE,SIZE).data
+
+for(const id in zones){
+
+const z=zones[id]
+
+const i=(z.y*SIZE+z.x)*4
+
+let r=data[i]
+let g=data[i+1]
+let b=data[i+2]
+
+const avg=(r+g+b)/3
+
+// BOOST saturation
+r += (r-avg)*1.2
+g += (g-avg)*1.2
+b += (b-avg)*1.2
+
+// clamp
+r=Math.max(0,Math.min(255,r))
+g=Math.max(0,Math.min(255,g))
+b=Math.max(0,Math.min(255,b))
+
+// différence avec la couleur actuelle
+const diff =
+Math.abs(r-z.current[0])+
+Math.abs(g-z.current[1])+
+Math.abs(b-z.current[2])
+
+// SMOOTHING ADAPTATIF
+const smoothing =
+diff>120 ? 0.65 :
+diff>60  ? 0.45 :
+diff>20  ? 0.30 :
+0.18
+
+z.current[0]+= (r-z.current[0])*smoothing
+z.current[1]+= (g-z.current[1])*smoothing
+z.current[2]+= (b-z.current[2])*smoothing
+
+const rr=Math.round(z.current[0])
+const gg=Math.round(z.current[1])
+const bb=Math.round(z.current[2])
+
+document.getElementById(id).style.background =
+`radial-gradient(circle,rgb(${rr},${gg},${bb}) 0%,transparent 80%)`
+
+}
+
+requestAnimationFrame(loop)
+}
+
+loop()
+
+}
+
+}
+
+</script>
 </body>
 </html>
