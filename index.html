@@ -2,28 +2,23 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>OBS Ambilight Pro - Doux & Équilibré</title>
+    <title>OBS Ambilight Pro - Ultra Équilibré</title>
     <style>
-        body { margin: 0; overflow: hidden; background: transparent; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: transparent; }
         
         #ambilight-container {
             position: absolute;
-            top: 12vh; /* Un peu plus haut */
-            left: 12vw; /* Un peu plus à gauche */
-            width: 76vw; /* Légèrement plus large pour couvrir plus de zone */
-            height: 76vh;
+            top: 10vh; left: 10vw;
+            width: 80vw; height: 80vh;
             z-index: 1;
             opacity: 0; 
-            transition: opacity 2s ease-in-out; /* Transition plus douce */
-            border-radius: 50px; 
+            transition: opacity 1s;
+            border-radius: 50%; /* Aide à la fusion circulaire */
         }
 
         #ambilight-glow {
-            width: 100%;
-            height: 100%;
-            border-radius: 50px;
-            /* Le flou initial casse déjà l'effet de bord */
-            filter: blur(80px); 
+            width: 100%; height: 100%;
+            filter: blur(100px); /* Flou massif pour la douceur */
         }
 
         #start-btn {
@@ -31,95 +26,78 @@
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             padding: 20px 40px;
-            background: #1a1a1a;
-            color: white;
-            border: 1px solid #333; cursor: pointer; border-radius: 8px;
-            z-index: 100;
+            background: #111; color: white;
+            border: 1px solid #444; cursor: pointer; z-index: 100;
         }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">ACTIVER AMBIANCE DOUCE</button>
-    
-    <div id="ambilight-container">
-        <div id="ambilight-glow"></div>
-    </div>
-    
+    <button id="start-btn">ACTIVER AMBILIGHT ÉQUILIBRÉ</button>
+    <div id="ambilight-container"><div id="ambilight-glow"></div></div>
     <canvas id="procCanvas" style="display:none;"></canvas>
 
     <script>
         const btn = document.getElementById('start-btn');
-        const container = document.getElementById('ambilight-container');
         const glow = document.getElementById('ambilight-glow');
         const canvas = document.getElementById('procCanvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         btn.onclick = async () => {
             try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { width: 1280, height: 720 },
-                    audio: false
-                });
-
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
                 const video = document.createElement('video');
                 video.srcObject = stream;
                 video.play();
 
                 btn.style.display = 'none'; 
-                container.style.opacity = '1';
+                document.getElementById('ambilight-container').style.opacity = '1';
 
                 video.onplaying = () => {
-                    canvas.width = 16; 
-                    canvas.height = 9;
+                    // Petite résolution pour moyenner naturellement les couleurs
+                    canvas.width = 20; 
+                    canvas.height = 12;
                     render();
                 };
 
                 function render() {
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
                     
-                    // --- ÉCHANTILLONNAGE DES MILIEUX ---
-                    const cTop    = getAvgRGB(data, 8, 1);  // Haut Milieu
-                    const cLeft   = getAvgRGB(data, 1, 4);  // Gauche Milieu
-                    const cRight  = getAvgRGB(data, 14, 4); // Droite Milieu
-                    // Le bas est échantillonné pour l'équilibre global, mais moins projeté
-                    const cBottom = getAvgRGB(data, 8, 7);  
+                    // On analyse des zones (bandes) pour être sûr de capter la couleur
+                    const cTop    = getZoneAvg(pixels, 5, 15, 0, 3);   // Bande haute centrale
+                    const cLeft   = getZoneAvg(pixels, 0, 4, 3, 9);    // Bande gauche centrale
+                    const cRight  = getZoneAvg(pixels, 16, 20, 3, 9);  // Bande droite centrale
 
                     glow.style.boxShadow = `
-                        /* === COUCHE 1 : La lueur d'ambiance très diffuse === */
-                        
-                        /* HAUT : Pas de décalage X, décalage Y vers le haut (-10vh), gros flou, gros étalement (10vw) */
-                        0px -10vh 400px 10vw ${cTop},
-                        
-                        /* GAUCHE : Décalage X vers la gauche (-10vw), pas de décalage Y, gros flou, gros étalement (10vh) */
-                        -10vw 0px 400px 10vh ${cLeft},
-                        
-                        /* DROITE : Décalage X vers la droite (10vw), pas de décalage Y, gros flou, gros étalement (10vh) */
-                        10vw 0px 400px 10vh ${cRight},
-                        
-                        /* === COUCHE 2 : Le cœur de couleur (plus près du bord, plus intense) === */
-                        
-                        0px -5vh 150px 2vw ${cTop},
-                        -5vw 0px 150px 2vh ${cLeft},
-                        5vw 0px 150px 2vh ${cRight},
-
-                        /* BAS : Très subtil, juste pour casser le noir absolu */
-                        0px 5vh 200px 0px ${cBottom}
+                        /* HAUT */
+                        0px -15vh 400px 10vw ${cTop},
+                        /* GAUCHE */
+                        -20vw 0px 400px 10vh ${cLeft},
+                        /* DROITE */
+                        20vw 0px 400px 10vh ${cRight}
                     `;
 
                     requestAnimationFrame(render);
                 }
 
-                function getAvgRGB(data, x, y) {
-                    const i = (y * canvas.width + x) * 4;
-                    // L'OPACITÉ EST RÉDUITE À 0.6 POUR LA DOUCEUR
-                    return `rgba(${data[i]}, ${data[i+1]}, ${data[i+2]}, 0.6)`;
+                // Fonction pour calculer la moyenne d'un rectangle de pixels
+                function getZoneAvg(data, xStart, xEnd, yStart, yEnd) {
+                    let r = 0, g = 0, b = 0, count = 0;
+                    for (let y = yStart; y < yEnd; y++) {
+                        for (let x = xStart; x < xEnd; x++) {
+                            const i = (y * canvas.width + x) * 4;
+                            r += data[i];
+                            g += data[i+1];
+                            b += data[i+2];
+                            count++;
+                        }
+                    }
+                    // On booste un peu la saturation pour la douceur (0.7 d'opacité)
+                    return `rgba(${Math.round(r/count)}, ${Math.round(g/count)}, ${Math.round(b/count)}, 0.7)`;
                 }
 
-            } catch (err) {
-                console.error(err);
-            }
+            } catch (err) { console.error(err); }
         };
     </script>
 </body>
