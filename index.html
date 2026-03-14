@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <title>Ambilight OBS</title>
     <style>
         body {
             margin: 0;
@@ -11,43 +12,54 @@
             justify-content: center;
             align-items: center;
             height: 100vh;
+            font-family: sans-serif;
         }
 
-        /* Le cadre qui contiendra la lueur */
+        /* Cadre principal */
         .ambilight-frame {
             position: relative;
-            width: 90vw; /* Taille du cadre */
-            height: 50.6vw; /* Ratio 16:9 */
-            border: 2px solid rgba(255,255,255,0.1);
+            width: 95vw;
+            height: 53.4vw; /* Ratio 16:9 */
+            border: 1px solid rgba(255,255,255,0.05);
         }
 
-        /* L'effet de halo lumineux */
+        /* Halo lumineux */
         #glow {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             z-index: -1;
-            filter: blur(60px) brightness(1.5) saturate(180%);
-            transform: scale(1.1);
-            transition: background-color 0.15s ease;
+            filter: blur(80px) brightness(1.4) saturate(170%);
+            transform: scale(1.15);
+            transition: background-color 0.1s linear;
+            border-radius: 50%; /* Pour une diffusion plus organique */
         }
 
-        #start-btn {
-            position: absolute;
-            z-index: 10;
-            padding: 10px 20px;
+        /* Bouton d'activation spécial OBS */
+        #setup-layer {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: white;
             cursor: pointer;
-            background: #111;
-            color: #fff;
-            border: 1px solid #444;
         }
+
+        #setup-layer:hover { background: rgba(0,0,0,0.6); }
+        .instruction { font-size: 20px; font-weight: bold; border: 2px solid #00f2ff; padding: 20px; border-radius: 10px; }
     </style>
 </head>
 <body>
 
-    <button id="start-btn">Connecter Gameplay</button>
+    <div id="setup-layer">
+        <div class="instruction">CLIQUE ICI POUR CONNECTER TON JEU</div>
+        <p style="margin-top:10px; font-size:12px;">(Fais un clic-droit sur la source > Interagir dans OBS)</p>
+    </div>
     
     <div class="ambilight-frame">
         <div id="glow"></div>
@@ -57,46 +69,50 @@
 
     <script>
         const glow = document.getElementById('glow');
-        const btn = document.getElementById('start-btn');
+        const setupLayer = document.getElementById('setup-layer');
         const canvas = document.getElementById('proc-canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-        btn.onclick = async () => {
+        // On déclenche la capture sur le clic de l'écran entier
+        setupLayer.onclick = async () => {
             try {
-                // On demande la capture de l'écran ou de la fenêtre du jeu
-                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const stream = await navigator.mediaDevices.getDisplayMedia({ 
+                    video: { cursor: "never" },
+                    audio: false 
+                });
+                
                 const video = document.createElement('video');
                 video.srcObject = stream;
+                video.muted = true;
                 video.play();
                 
-                btn.style.display = 'none';
+                // On cache l'interface de setup une fois connecté
+                setupLayer.style.display = 'none';
 
                 video.onloadedmetadata = () => {
-                    canvas.width = 32; // Basse résolution pour la performance
-                    canvas.height = 18;
+                    canvas.width = 16; // Très basse résolution = performance max
+                    canvas.height = 9;
                     
                     function update() {
                         if (video.paused || video.ended) return;
                         
                         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        
-                        // Analyse de la couleur moyenne
                         const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const length = frame.data.length;
+                        const data = frame.data;
+                        
                         let r = 0, g = 0, b = 0;
-
-                        for (let i = 0; i < length; i += 4) {
-                            r += frame.data[i];
-                            g += frame.data[i+1];
-                            b += frame.data[i+2];
+                        for (let i = 0; i < data.length; i += 4) {
+                            r += data[i];
+                            g += data[i+1];
+                            b += data[i+2];
                         }
 
-                        const count = length / 4;
-                        r = Math.floor(r / count);
-                        g = Math.floor(g / count);
-                        b = Math.floor(b / count);
+                        const count = data.length / 4;
+                        r = Math.round(r / count);
+                        g = Math.round(g / count);
+                        b = Math.round(b / count);
 
-                        // Application de la couleur au halo
+                        // Injection de la couleur dans le halo CSS
                         glow.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
                         
                         requestAnimationFrame(update);
@@ -104,7 +120,7 @@
                     update();
                 };
             } catch (err) {
-                console.error("Erreur : " + err);
+                alert("Erreur de connexion : " + err);
             }
         };
     </script>
