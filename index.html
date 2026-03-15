@@ -136,5 +136,13 @@
             } catch (e) { console.error(e); }
         };
     </script>
+    <script>
+  window.addEventListener('keydown', function(event) {
+    // On choisit la touche "L" (comme Lumineux), mais ça peut être n'importe laquelle
+    if (event.key === 'l' || event.key === 'L') {
+      document.querySelector('button').click(); 
+    }
+  });
+</script>
 </body>
 </html>
