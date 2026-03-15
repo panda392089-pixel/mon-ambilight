@@ -144,5 +144,13 @@
     }
   });
 </script>
+    <script>window.onload = function() {
+    // On attend 100ms pour être sûr que tout est chargé
+    setTimeout(() => {
+        // Remplacez 'monBouton' par l'ID de votre bouton ou la fonction de l'effet
+        document.querySelector('button').click(); 
+        // OU lancez directement votre fonction : maFonctionEffet();
+    }, 100);
+};</script>
 </body>
 </html>
