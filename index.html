@@ -2,43 +2,47 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Ambilight Ultra-Final Optimized</title>
+    <title>Ambilight Ultra-Final</title>
     <style>
         body, html { margin: 0; padding: 0; background: #000; overflow: hidden; }
         
         #ambilight {
             position: fixed;
-            top: -10%; left: -10%; /* Léger débordement pour éviter les bords nets */
-            width: 120%; height: 120%;
-            /* Optimisation : 'backface-visibility' et 'transform' 
-               forcent la création d'une couche hardware (Compositing Layer)
-            */
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            /* Le GPU gère le flou et la saturation de manière native */
             filter: blur(80px) saturate(1.8);
-            transform: translateZ(0); 
-            will-change: filter;
+            transform: scale(1.15); /* Plus grand scale pour cacher les bords lors du flou */
+            image-rendering: low-quality; /* Indique au moteur de ne pas lisser inutilement */
         }
 
         #ui { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; }
-        button { padding: 15px 30px; background: none; border: 2px solid #fff; color: #fff; cursor: pointer; font-family: sans-serif; }
+        button { 
+            padding: 15px 30px; background: rgba(0,0,0,0.7); 
+            border: 1px solid #fff; color: #fff; cursor: pointer; 
+            font-family: sans-serif; letter-spacing: 1px;
+        }
     </style>
 </head>
 <body>
 
-    <div id="ui"><button id="btn">ACTIVER L'IMMERSION</button></div>
+    <div id="ui"><button id="btn">LANCER L'IMMERSION</button></div>
     <canvas id="ambilight"></canvas>
 
     <script>
         const btn = document.getElementById("btn");
         const canvas = document.getElementById("ambilight");
-        // alpha: false pour optimiser le blending GPU
+        // 'desynchronized: true' réduit la latence et libère le CPU en sautant la synchro verticale classique
         const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
 
         const start = async () => {
             try {
+                // Capture en 480p (ratio 16:9) mais avec un débit d'images limité
+                // Capturer en 128px peut parfois bugger sur certains drivers, 640x360 est le "sweet spot".
                 const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { width: 80, height: 45, frameRate: 24 } // Résolution encore plus basse
+                    video: { width: 640, height: 360, frameRate: 24 } // 24 FPS suffit pour un effet de lumière fluide
                 });
-                
+
                 const video = document.createElement("video");
                 video.srcObject = stream;
                 video.muted = true;
@@ -46,29 +50,29 @@
 
                 document.getElementById("ui").style.display = "none";
                 
-                // On descend à une résolution ridicule : 80x45 est largement suffisant 
-                // pour une ambiance colorée après un flou de 80px.
-                canvas.width = 80;
-                canvas.height = 45;
-                ctx.imageSmoothingEnabled = false; 
+                // Le canvas interne reste minuscule pour que le GPU ne traite que peu de pixels
+                canvas.width = 160;
+                canvas.height = 90;
 
                 const draw = () => {
-                    // Un seul appel drawImage au lieu de 4. 
-                    // Le GPU gère l'interpolation des couleurs lors du flou CSS.
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const w = canvas.width;
+                    const h = canvas.height;
+
+                    // On dessine l'image entière une seule fois, très étirée.
+                    // C'est l'optimisation ultime : au lieu de 4 zones, on dessine tout 
+                    // et on laisse le flou CSS recréer l'ambiance des bords.
+                    ctx.drawImage(video, 0, 0, w, h);
+
+                    // Utilisation de requestAnimationFrame pour coller au rafraîchissement d'OBS
                     requestAnimationFrame(draw);
                 };
-                
                 draw();
-
-                // Libération de la mémoire si le stream s'arrête
-                stream.getVideoTracks()[0].onended = () => location.reload();
-
-            } catch (e) { console.error("Erreur ou annulation :", e); }
+            } catch (e) { console.error("Erreur d'accès écran : ", e); }
         };
 
         btn.onclick = start;
-        // On évite le click forcé auto (souvent bloqué par les navigateurs sans interaction réelle)
+        // Auto-click pour Touch Portal
+        window.onload = () => setTimeout(() => btn.click(), 500);
     </script>
 </body>
 </html>
