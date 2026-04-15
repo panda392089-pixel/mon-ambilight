@@ -2,21 +2,24 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Ambilight Ultra-Final</title>
+    <title>Ambilight Ultra-Final Optimized</title>
     <style>
         body, html { margin: 0; padding: 0; background: #000; overflow: hidden; }
         
         #ambilight {
             position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            /* Le flou est appliqué globalement sur le canvas par le GPU */
-            filter: blur(100px) saturate(1.5);
-            transform: scale(1.1);
+            top: -10%; left: -10%; /* Léger débordement pour éviter les bords nets */
+            width: 120%; height: 120%;
+            /* Optimisation : 'backface-visibility' et 'transform' 
+               forcent la création d'une couche hardware (Compositing Layer)
+            */
+            filter: blur(80px) saturate(1.8);
+            transform: translateZ(0); 
+            will-change: filter;
         }
 
         #ui { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; }
-        button { padding: 15px 30px; background: none; border: 2px solid #fff; color: #fff; cursor: pointer; font-weight: bold; }
+        button { padding: 15px 30px; background: none; border: 2px solid #fff; color: #fff; cursor: pointer; font-family: sans-serif; }
     </style>
 </head>
 <body>
@@ -27,48 +30,45 @@
     <script>
         const btn = document.getElementById("btn");
         const canvas = document.getElementById("ambilight");
-        const ctx = canvas.getContext("2d", { alpha: false });
+        // alpha: false pour optimiser le blending GPU
+        const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
 
         const start = async () => {
             try {
-                // On capture en résolution MINIME (le CPU ne force pas du tout)
                 const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { width: 128, height: 72, frameRate: 30 }
+                    video: { width: 80, height: 45, frameRate: 24 } // Résolution encore plus basse
                 });
+                
                 const video = document.createElement("video");
                 video.srcObject = stream;
+                video.muted = true;
                 await video.play();
 
                 document.getElementById("ui").style.display = "none";
                 
-                // Résolution interne du canvas très basse pour le GPU
-                canvas.width = 128;
-                canvas.height = 72;
+                // On descend à une résolution ridicule : 80x45 est largement suffisant 
+                // pour une ambiance colorée après un flou de 80px.
+                canvas.width = 80;
+                canvas.height = 45;
+                ctx.imageSmoothingEnabled = false; 
 
                 const draw = () => {
-                    const w = canvas.width;
-                    const h = canvas.height;
-
-                    // On dessine la vidéo 4 fois de manière stratégique
-                    // Pas de lecture de pixels, juste du "blitting" (copie de texture)
-                    
-                    // Zone HAUT
-                    ctx.drawImage(video, 0, 0, w, h/3, 0, 0, w, h/3);
-                    // Zone BAS
-                    ctx.drawImage(video, 0, h*0.7, w, h/3, 0, h*0.7, w, h/3);
-                    // Zone GAUCHE
-                    ctx.drawImage(video, 0, 0, w/4, h, 0, 0, w/4, h);
-                    // Zone DROITE
-                    ctx.drawImage(video, w*0.7, 0, w/4, h, w*0.7, 0, w/4, h);
-
+                    // Un seul appel drawImage au lieu de 4. 
+                    // Le GPU gère l'interpolation des couleurs lors du flou CSS.
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     requestAnimationFrame(draw);
                 };
+                
                 draw();
-            } catch (e) { console.error(e); }
+
+                // Libération de la mémoire si le stream s'arrête
+                stream.getVideoTracks()[0].onended = () => location.reload();
+
+            } catch (e) { console.error("Erreur ou annulation :", e); }
         };
 
         btn.onclick = start;
-        window.onload = () => setTimeout(() => btn.click(), 500);
+        // On évite le click forcé auto (souvent bloqué par les navigateurs sans interaction réelle)
     </script>
 </body>
 </html>
